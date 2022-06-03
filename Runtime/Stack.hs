@@ -22,6 +22,9 @@ module Runtime.Stack
     popDataStack#,
     peekDataStack#,
     freezeDataStack#,
+#if DEBUG == 1
+    debugDataStack#,
+#endif
   )
 where
 

@@ -33,6 +33,9 @@ module Runtime.Internal
     peekDataStack#,
     freezeDataStack#,
     resizeDataStack#,
+#if DEBUG == 1
+    debugDataStack#,
+#endif
 
     -- * Values
     Bool# (.., False#, True#),
@@ -122,8 +125,8 @@ popCallStack# (CallStack (# arr, ptr #)) s0 =
   let !(# s1, ptrValue #) = getAndDecrementIntVar# ptr s0
    in
 #if STACK_SAFE_OPERATIONS == 1
-       case ptrValue >=# 0# of
-         0# -> raise# StackUnderflow
+       case ptrValue of
+         -1# -> raise# StackUnderflow
          _ ->
 #endif
            readIntArray# arr ptrValue s1
@@ -288,13 +291,35 @@ resizeDataStack# :: MutableArray# s Value# -> MutableIntVar# s -> State# s -> (#
 resizeDataStack# arr ptr s0 =
   let !(# s1, ptrValue #) = readIntVar# ptr s0
       !oldSize = sizeofMutableArray# arr
-   in case ptrValue >=# oldSize of
+   in case ptrValue +# 1# >=# oldSize of
         1# ->
           let !(# s2, arr0 #) = newArray# (oldSize *# 2#) (VInteger# 0#) s1
               !s3 = copyMutableArray# arr 0# arr0 0# oldSize s2
            in (# s3, arr0 #)
         _ -> (# s1, arr #)
 {-# INLINEABLE resizeDataStack# #-}
+
+#if DEBUG == 1
+debugDataStack# :: DataStack# RealWorld -> State# RealWorld -> State# RealWorld
+debugDataStack# (DataStack (# arr, ptr #)) s0 = s0
+  -- let !(# s1, _ #) = unIO (putStr "stack=[ ") s0
+  --     !(# s2, !size #) = getSizeofMutableByteArray# arr s1
+  --     !(# s3, !arr0 #) = newPinnedByteArray# size s2
+  --     !s4 = copyMutableByteArray# arr 0# arr0 0# size s3
+  --     !(# s5, !arr1 #) = unsafeFreezeByteArray# arr0 s4
+  --     !(# s6, ptr0 #) = readIntVar# ptr s5
+  --  in go arr1 0# (ptr0 +# 1#) s6
+  -- where
+  --   go arr0 off end s0 = case off >=# end of
+  --     1# ->
+  --       let !(# s1, _ #) = unIO (putStrLn ("], ptr=" <> show (I# (end -# 1#)))) s0
+  --        in s1
+  --     _ ->
+  --       let !idx = indexIntArray# arr0 off
+  --           !(# s1, _ #) = unIO (putStr (show (I# idx) <> " ")) s0
+  --        in go arr0 (off +# 1#) end s1
+#endif
+
 
 --------------------------------------------------------------------
 ----------------------------- VALUES -------------------------------

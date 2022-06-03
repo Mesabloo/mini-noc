@@ -72,15 +72,24 @@ example2 = [AInteger 5, AInteger 6, AIdentifier "+"]
 example3 :: Expr
 example3 = example2 <> example2 <> [AIdentifier "+"]
 
--- | Computation time: ~6-7us
+-- | Computation time:
+--
+--   [Original interpreter] ~6-7us
+--   [Optimized VM] ~2.5us
 example4 :: Expr
 example4 = example3 <> example3 <> [AIdentifier "pop", AIdentifier "dup", AIdentifier "+"]
 
--- | Computation time: ~150ms
+-- | Computation time:
+--
+--   [Original interpreter] ~150ms
+--   [Optimized VM] ???
 example5 :: Expr
 example5 = [AInteger 3, AInteger 6, AIdentifier "ack"]
 
--- | Computation time: ~26us
+-- | Computation time:
+--
+--   [Original interpreter] ~26us
+--   [Optimized VM] ~5.2µs
 example6 :: Expr
 example6 = [AInteger 15, AIdentifier "fact"]
 
