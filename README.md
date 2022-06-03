@@ -5,7 +5,7 @@ The code was originally put into a gist ([https://gist.github.com/Mesabloo/96aef
 The goal is to implement a minimalistic virtual machine (VM) to run a very small subset of the [Noc language](https://github.com/noc-lang).
 Performance is an issue.
 
-Here are the last known performance results:
+Here are the last known performance results on my machine:
 
 | `fact(15)` | `ack(3, 6)` |
 | :--------: | :---------: |
