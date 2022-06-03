@@ -26,7 +26,9 @@
 
 import Bytecode (BytecodeFile (File), CodeTable#, ConstantTable#, FunctionTable#, SymbolTable#, printBytecodeFile)
 import Compiler (compile)
+import Control.Exception (SomeException, fromException, toException)
 import Data.Bool (Bool (..), not)
+import Data.Maybe (Maybe (..))
 import Data.Semigroup ((<>))
 import Data.String (String)
 import Data.Text (Text)
@@ -38,7 +40,7 @@ import GHC.Types (RuntimeRep (TupleRep), UnliftedRep, Type)
 import GHC.Word (Word32 (W32#))
 #endif
 import Primitives (TypeError (TypeError))
-import Runtime.Stack (CallStack#, DataStack#, freezeDataStack#, newCallStack#, newDataStack#, popCallStack#, popDataStack#, pushCallStack#, pushDataStack#)
+import Runtime.Stack (CallStack#, DataStack#, freezeDataStack#, newCallStack#, newDataStack#, popCallStack#, popDataStack#, pushCallStack#, pushDataStack#, StackUnderflow)
 #if DEBUG == 1
 import Runtime.Stack (debugCallStack#)
 #endif
@@ -82,7 +84,7 @@ example4 = example3 <> example3 <> [AIdentifier "pop", AIdentifier "dup", AIdent
 -- | Computation time:
 --
 --   [Original interpreter] ~150ms
---   [Optimized VM] ~30.5ms
+--   [Optimized VM] ~30ms
 example5 :: Expr
 example5 = [AInteger 3, AInteger 6, AIdentifier "ack"]
 
@@ -135,7 +137,10 @@ showTime = go "s"
 -------------------------------------------------------------
 
 main :: IO ()
-main = IO main'
+main = IO (catch# main' rethrow)
+  where
+    rethrow :: a -> State# RealWorld -> (# State# RealWorld, () #)
+    rethrow exn s0 = (# s0, raise# exn #)
 
 main' :: State# RealWorld -> (# State# RealWorld, () #)
 main' s0 =
@@ -218,7 +223,7 @@ data Lift a = Lift a
 eval :: Context -> State# RealWorld -> (# State# RealWorld, (# DataStack# RealWorld, CallStack# RealWorld #) #)
 eval (Context dataStack callStack ip constants _ functions code) s0 =
   let !codeSize = sizeofByteArray# code `quotInt#` 4#
-      !(# s1, (Lift !dataStack0, Lift !callStack0) #) = catch# (go dataStack callStack codeSize ip) handler s0 -- catch# (go dataStack callStack codeSize ip) printMachineStateOnError s0
+      !(# s1, (Lift !dataStack0, Lift !callStack0) #) = catch# (go dataStack callStack codeSize ip) handler s0
    in (# s1, (# dataStack0, callStack0 #) #)
   where
     go :: DataStack# RealWorld -> CallStack# RealWorld -> Int# -> Int# -> State# RealWorld -> (# State# RealWorld, (Lift (DataStack# RealWorld), Lift (CallStack# RealWorld)) #)
@@ -228,7 +233,7 @@ eval (Context dataStack callStack ip constants _ functions code) s0 =
         _ ->
 #if DEBUG == 1
           let !_ = unsafePerformIO (putStrLn $ "code size=(expected=" <> show (I# size) <> ", real=" <> show (I# (sizeofByteArray# code `quotInt#` 4#)) <> "), access at=" <> show (I# ip0))
-              !_ = debugCallStack# callStack s0
+              _ = debugCallStack# callStack s0
            in
 #endif
           case word32ToWord# (indexWord32Array# code ip0) of
@@ -274,20 +279,20 @@ eval (Context dataStack callStack ip constants _ functions code) s0 =
                       !_ = unsafePerformIO (putStrLn $ "> Unquotting quote found at offset " <> show (I# off) <> " from ip=" <> show (I# ip0))
 #endif
                    in go dataStack stack0 size off s2
-                val -> raise# (TypeError $ "Not a quote: " <> showValue# val)
+                val -> raise# (toException $ TypeError $ "Not a quote: " <> showValue# val)
             _ -> undefined
 
-    handler e s0 =
-      let !(# s1, _ #) = unIO (putStrLn "Received exception") s0
-          -- !() = raise# e
-       in (# s1, (Lift dataStack, Lift callStack) #)
+    handler :: SomeException -> State# RealWorld -> (# State# RealWorld, (Lift (DataStack# RealWorld), Lift (CallStack# RealWorld)) #)
+    handler (!exn :: SomeException) s0 =
+      let !(# s1, () #) = case fromException @StackUnderflow exn of
+            Just !_ -> unIO (putStrLn $ "\n[!] Tried popping a value off an empty stack.") s0
+            Nothing -> (# s0, () #)
 
-    -- printMachineStateOnError e s0 = case fromException @EvalError e of
-    --   Just ex ->
-    --     let !(# s1, _ #) = unIO (putStrLn $ "/!\\ VM encountered exception: " <> show ex) s0
-    --      in (# s1, (Lift dataStack, Lift callStack) #)
-    --   Nothing -> raise# e
-    -- {-# INLINE printMachineStateOnError #-}
+          !(# s2, () #) = case fromException @TypeError exn of
+            Just !(TypeError msg) -> unIO (putStrLn $ "\n[!] Type error on evaluation: " <> msg) s1
+            Nothing -> (# s1, () #)
+
+       in (# s2, raise# exn #)
 {-# INLINE eval #-}
 
 {- ORMOLU_ENABLE -}

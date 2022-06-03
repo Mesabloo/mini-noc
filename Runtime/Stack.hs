@@ -25,6 +25,9 @@ module Runtime.Stack
 #if DEBUG == 1
     debugDataStack#,
 #endif
+
+    -- * Exceptions
+    StackUnderflow,
   )
 where
 

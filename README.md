@@ -9,7 +9,7 @@ Here are the last known performance results on my machine:
 
 | `fact(15)` | `ack(3, 6)` |
 | :--------: | :---------: |
-|   ~5µs   |   ~30.5ms   |
+|   ~5µs   |    ~30ms    |
 
 ---
 

@@ -10,10 +10,10 @@
 
 module Primitives where
 
+import Control.Exception (toException)
 import Data.Function (($))
 import Data.Semigroup ((<>))
 import Data.String (String)
-import GHC.Base (($!))
 import GHC.Err (undefined)
 import GHC.Exception (Exception)
 import GHC.Exts (raise#, (*#), (+#), (-#), (==#), (==##))
@@ -42,7 +42,7 @@ add stack s0 =
       !(# s2, v2 #) = popDataStack# stack s1
    in case (# v1, v2 #) of
         (# VInteger# i1, VInteger# i2 #) -> pushDataStack# stack (VInteger# (i2 +# i1)) s2
-        _ -> raise# $! TypeError $ "Expected two ints for reducer '+' (found " <> showValue# v1 <> ", " <> showValue# v2 <> ")"
+        _ -> raise# $ toException $ TypeError $ "Expected two ints for reducer '+' (found " <> showValue# v1 <> ", " <> showValue# v2 <> ")"
 {-# NOINLINE add #-}
 
 times :: Closure
@@ -51,7 +51,7 @@ times stack s0 =
       !(# s2, v2 #) = popDataStack# stack s1
    in case (# v1, v2 #) of
         (# VInteger# i1, VInteger# i2 #) -> pushDataStack# stack (VInteger# (i2 *# i1)) s2
-        _ -> raise# $! TypeError $ "Expected two ints for reducer '*' (found " <> showValue# v1 <> ", " <> showValue# v2 <> ")"
+        _ -> raise# $ toException $ TypeError $ "Expected two ints for reducer '*' (found " <> showValue# v1 <> ", " <> showValue# v2 <> ")"
 {-# NOINLINE times #-}
 
 sub :: Closure
@@ -60,7 +60,7 @@ sub stack s0 =
       !(# s2, v2 #) = popDataStack# stack s1
    in case (# v1, v2 #) of
         (# VInteger# i1, VInteger# i2 #) -> pushDataStack# stack (VInteger# (i2 -# i1)) s2
-        _ -> raise# $! TypeError $ "Expected two ints for reducer '-' (found " <> showValue# v1 <> ", " <> showValue# v2 <> ")"
+        _ -> raise# $ toException $ TypeError $ "Expected two ints for reducer '-' (found " <> showValue# v1 <> ", " <> showValue# v2 <> ")"
 {-# NOINLINE sub #-}
 
 dup :: Closure
@@ -105,7 +105,7 @@ ifthenelse stack s0 =
    in case vCond of
         VBoolean# True# -> pushDataStack# stack vThen s3
         VBoolean# False# -> pushDataStack# stack vElse s3
-        _ -> raise# $! TypeError "Expected boolean as condition for if-then-else"
+        _ -> raise# $ toException $ TypeError "Expected boolean as condition for if-then-else"
 {-# NOINLINE ifthenelse #-}
 
 eq :: Closure

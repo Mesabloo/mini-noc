@@ -56,8 +56,11 @@ where
 
 #define INITIAL_CALLSTACK_SIZE 20
 #define INITIAL_DATASTACK_SIZE 100
-#define STACK_SAFE_OPERATIONS 1
+#define STACK_SAFE_OPERATIONS 0
 
+#if STACK_SAFE_OPERATIONS == 1
+import Control.Exception (toException)
+#endif
 import Data.Eq ((==))
 #if DEBUG == 1
 import Data.Function (($))
@@ -65,14 +68,13 @@ import Data.Function (($))
 import Data.Semigroup ((<>))
 import Data.String (String)
 import Data.Text (Text)
-import GHC.Err (undefined)
 import GHC.Exception (Exception)
 import GHC.Exts (Array#, Char (C#), Char#, Double (D#), Double#, Int (I#), Int#, MutableArray#, MutableByteArray#, RealWorld, State#, copyMutableArray#, eqChar#, getSizeofMutableByteArray#, newArray#, newByteArray#, quotInt#, readArray#, readIntArray#, resizeMutableByteArray#, sizeofMutableArray#, unsafeFreezeArray#, writeArray#, writeIntArray#, (*#), (+#), (==#), (==##), (>=#))
 #if STACK_SAFE_OPERATIONS == 1
 import GHC.Exts (raise#)
 #endif
 #if DEBUG == 1
-import GHC.Exts (indexIntArray#, unsafeFreezeByteArray#, (-#))
+import GHC.Exts (indexIntArray#, unsafeFreezeByteArray#, (-#), newPinnedByteArray#, copyMutableByteArray#)
 import GHC.IO (unsafePerformIO, unIO)
 #endif
 import GHC.Show (Show, show)
@@ -129,8 +131,8 @@ popCallStack# (CallStack (# arr, ptr #)) s0 =
 #if STACK_SAFE_OPERATIONS == 1
        case ptrValue of
          -1# ->
-           let !(# !_, !_ #) = incrementAndGetIntVar# ptr s1
-            in raise# StackUnderflow
+           let _ = incrementAndGetIntVar# ptr s1
+            in raise# (toException StackUnderflow)
          _ ->
 #endif
            readIntArray# arr ptrValue s1
@@ -224,8 +226,8 @@ popDataStack# (DataStack (# arr, ptr #)) s0 =
 #if STACK_SAFE_OPERATIONS == 1
        case ptrValue of
          -1# ->
-          let !(# !_, !_ #) = incrementAndGetIntVar# ptr s1
-           in raise# StackUnderflow
+          let _ = incrementAndGetIntVar# ptr s1
+           in raise# (toException StackUnderflow)
          _ ->
 #endif
            readArray# arr ptrValue s1
@@ -240,8 +242,8 @@ peekDataStack# (DataStack (# arr, ptr #)) s0 =
 #if STACK_SAFE_OPERATIONS == 1
       case ptrValue of
         -1# ->
-           let !(# !_, !_ #) = incrementAndGetIntVar# ptr s1
-            in raise# StackUnderflow
+           let _ = incrementAndGetIntVar# ptr s1
+            in raise# (toException StackUnderflow)
         _ ->
 #endif
           readArray# arr ptrValue s1
@@ -312,13 +314,14 @@ pattern True#, False# :: Bool#
 pattern True# = Bool# 1#
 pattern False# = Bool# 0#
 
+{-# COMPLETE True#, False# #-}
+
 -- | Retrieve the 'String' representation of a 'Bool#'.
 --
 --   Note that this is not inside a 'Show' instance as 'Show' takes a lifted type as first parameter.
 showBool# :: Bool# -> String
 showBool# True# = "true"
 showBool# False# = "false"
-showBool# _ = undefined
 {-# INLINE showBool# #-}
 
 -- | The kind of runtime values as a unboxed sum.
