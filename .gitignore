@@ -1,0 +1,7 @@
+.gdbinit
+VM-debug
+VM
+*.o
+*.hi
+.ccls-cache/
+rr_traces/
