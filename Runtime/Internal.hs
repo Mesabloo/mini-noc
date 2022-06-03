@@ -21,6 +21,9 @@ module Runtime.Internal
     pushCallStack#,
     popCallStack#,
     resizeCallStack#,
+#if DEBUG == 1
+    debugCallStack#,
+#endif
 
     -- ** Data stack
     DataStack# (..),
@@ -61,13 +64,15 @@ import Data.String (String)
 import Data.Text (Text)
 import GHC.Err (undefined)
 import GHC.Exception (Exception)
-import GHC.Exts (Array#, Char (C#), Char#, Double (D#), Double#, Int (I#), Int#, MutableArray#, MutableByteArray#, RealWorld, State#, copyMutableArray#, eqChar#, getSizeofMutableByteArray#, newArray#, newByteArray#, quotInt#, raise#, readArray#, readIntArray#, resizeMutableByteArray#, sizeofMutableArray#, unsafeFreezeArray#, writeArray#, writeIntArray#, (*#), (+#), (==#), (==##), (>=#))
+import GHC.Exts (Array#, Char (C#), Char#, Double (D#), Double#, Int (I#), Int#, MutableArray#, MutableByteArray#, RealWorld, State#, copyMutableArray#, copyMutableByteArray#, eqChar#, getSizeofMutableByteArray#, newArray#, newByteArray#, newPinnedByteArray#, quotInt#, raise#, readArray#, readIntArray#, resizeMutableByteArray#, sizeofMutableArray#, unsafeFreezeArray#, writeArray#, writeIntArray#, (*#), (+#), (==#), (==##), (>=#))
 #if DEBUG == 1
-import GHC.IO (unsafePerformIO)
+import GHC.Exts (indexIntArray#, unsafeFreezeByteArray#, (-#))
+import GHC.Int (Int (I#))
+import GHC.IO (unsafePerformIO, unIO)
 #endif
 import GHC.Show (Show, show)
 #if DEBUG == 1
-import System.IO (putStrLn)
+import System.IO (putStrLn, putStr)
 #endif
 import GHC.Types (RuntimeRep (IntRep, TupleRep), TYPE, UnliftedRep, Type)
 import Variables (MutableIntVar#, getAndDecrementIntVar#, incrementAndGetMutableIntVar#, newIntVar#, readIntVar#)
@@ -83,7 +88,7 @@ instance Exception StackUnderflow
 ----------------------------- STACKS -----------------------------------
 ------------------------------------------------------------------------
 
--- | Holds 'Int32#'s internally, which are simply offsets from the beginning of the @CODE@ section.
+-- | Holds 'Word32#'s internally, which are simply offsets from the beginning of the @CODE@ section.
 type CallStack# :: Type -> TYPE ('TupleRep '[UnliftedRep, UnliftedRep])
 newtype CallStack# s = CallStack (# MutableByteArray# s, MutableIntVar# s #)
 
@@ -91,7 +96,7 @@ newtype CallStack# s = CallStack (# MutableByteArray# s, MutableIntVar# s #)
 newCallStack# :: State# s -> (# State# s, CallStack# s #)
 newCallStack# s0 =
   let !(# s1, ptr #) = newIntVar# -1# s0
-      !(# s2, arr #) = newByteArray# (INITIAL_CALLSTACK_SIZE# *# WORD_SIZE_IN_BYTES) s1
+      !(# s2, arr #) = newPinnedByteArray# (INITIAL_CALLSTACK_SIZE# *# WORD_SIZE_IN_BYTES) s1
    in (# s2, CallStack (# arr, ptr #) #)
 {-# INLINE newCallStack# #-}
 
@@ -138,18 +143,70 @@ resizeCallStack# arr ptr s0 =
 #if DEBUG
       !_ = unsafePerformIO (putStrLn $ "Callstack: ptr=" <> show (I# ptrValue) <> ", off=" <> show (I# (ptrValue *# WORD_SIZE_IN_BYTES)) <> "B, size=" <> show (I# oldSize) <> "B")
 #endif
-   in case ptrValue *# WORD_SIZE_IN_BYTES >=# oldSize of
+   in case (ptrValue +# 1#) *# WORD_SIZE_IN_BYTES >=# oldSize of
         1# ->
 #if DEBUG
           let !_ = unsafePerformIO (putStrLn $ "Callstack: expanding") in
 #endif
-          resizeMutableByteArray# arr (oldSize *# 2#) s2
+#if 0
+          -- FIXME: Currently, this does not work and gives this error when debugging with sanity checks:
+          --
+          -- ```
+          -- VM-debug: internal error: ASSERTION FAILED: file rts/sm/Storage.c, line 1194
+          --
+          -- Stack trace:
+          -- VM-debug: Failed to get stack frames of current process: no matching address range: Invalid argument
+          --                   0x501b32    set_initial_registers (/home/mesabloo/tmp/noc/VM-debug)
+          --             0x7fb85c2f1478    dwfl_thread_getframes (/nix/store/k5knw5l7gcbb6dfrnpr1ghkfpj0s0v01-elfutils-0.187/lib/libdw-0.187.so)
+          --             0x7fb85c2f0fbb    get_one_thread_cb (/nix/store/k5knw5l7gcbb6dfrnpr1ghkfpj0s0v01-elfutils-0.187/lib/libdw-0.187.so)
+          --             0x7fb85c2f12e2    dwfl_getthreads (/nix/store/k5knw5l7gcbb6dfrnpr1ghkfpj0s0v01-elfutils-0.187/lib/libdw-0.187.so)
+          --             0x7fb85c2f1827    dwfl_getthread_frames (/nix/store/k5knw5l7gcbb6dfrnpr1ghkfpj0s0v01-elfutils-0.187/lib/libdw-0.187.so)
+          --                   0x501a1c    libdwGetBacktrace (/home/mesabloo/tmp/noc/VM-debug)
+          --                   0x4bd2bd    rtsFatalInternalErrorFn (/home/mesabloo/tmp/noc/VM-debug)
+          --                   0x4bcf01    barf (/home/mesabloo/tmp/noc/VM-debug)
+          --                   0x4bcf33    errorBelch (/home/mesabloo/tmp/noc/VM-debug)
+          --                   0x4e37db    allocateMightFail (/home/mesabloo/tmp/noc/VM-debug)
+          --                   0x4eb4dd    stg_newByteArrayzh (/home/mesabloo/tmp/noc/VM-debug)
+
+          --     (GHC version 9.3.20220406 for x86_64_unknown_linux)
+          --     Please report this as a GHC bug:  https://www.haskell.org/ghc/reportabug
+          -- ```
+          --
+          -- I am quite unsure what causes this, but I will try manually allocating a pinned `ByteArray#`.
+          -- I don't think this will hardly change anything, but let's see.
+          let !(# s3, !arr0 #) = resizeMutableByteArray# arr (oldSize *# 2#) s2
+           in (# s3, arr0 #)
+#endif
+          let !(# s3, !arr0 #) = newPinnedByteArray# (oldSize *# 2#) s2
+              !s4 = copyMutableByteArray# arr 0# arr0 0# oldSize s3
+           in (# s4, arr0 #)
         _ ->
 #if DEBUG
           let !_ = unsafePerformIO (putStrLn $ "Callstack: not expanding") in
 #endif
           (# s2, arr #)
 {-# INLINEABLE resizeCallStack# #-}
+
+#if DEBUG == 1
+debugCallStack# :: CallStack# RealWorld -> State# RealWorld -> State# RealWorld
+debugCallStack# (CallStack (# arr, ptr #)) s0 =
+  let !(# s1, _ #) = unIO (putStr "stack=[ ") s0
+      !(# s2, !size #) = getSizeofMutableByteArray# arr s1
+      !(# s3, !arr0 #) = newPinnedByteArray# size s2
+      !s4 = copyMutableByteArray# arr 0# arr0 0# size s3
+      !(# s5, !arr1 #) = unsafeFreezeByteArray# arr0 s4
+      !(# s6, ptr0 #) = readIntVar# ptr s5
+   in go arr1 0# (ptr0 +# 1#) s6
+  where
+    go arr0 off end s0 = case off >=# end of
+      1# ->
+        let !(# s1, _ #) = unIO (putStrLn ("], ptr=" <> show (I# (end -# 1#)))) s0
+         in s1
+      _ ->
+        let !idx = indexIntArray# arr0 off
+            !(# s1, _ #) = unIO (putStr (show (I# idx) <> " ")) s0
+         in go arr0 (off +# 1#) end s1
+#endif
 
 {- ORMOLU_ENABLE -}
 

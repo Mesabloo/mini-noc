@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE MonoLocalBinds #-}
 {-# LANGUAGE Strict #-}
@@ -10,6 +11,9 @@ module Runtime.Stack
     newCallStack#,
     pushCallStack#,
     popCallStack#,
+#if DEBUG == 1
+    debugCallStack#,
+#endif
 
     -- * Data stack
     DataStack#,

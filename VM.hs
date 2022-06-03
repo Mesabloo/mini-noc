@@ -39,6 +39,9 @@ import GHC.Word (Word32 (W32#))
 #endif
 import Primitives (TypeError (TypeError))
 import Runtime.Stack (CallStack#, DataStack#, freezeDataStack#, newCallStack#, newDataStack#, popCallStack#, popDataStack#, pushCallStack#, pushDataStack#)
+#if DEBUG == 1
+import Runtime.Stack (debugCallStack#)
+#endif
 import Runtime.Value (Value# (VPrimitive#, VQuote#), showValue#)
 import System.CPUTime (getCPUTime)
 import System.IO (print, putStr, putStrLn)
@@ -136,7 +139,7 @@ main' s0 =
       !(# s5, !dataStack #) = newDataStack# s4
       !(# s6, !callStack #) = newCallStack# s5
 
-      !(# s7, !(# !time, !(# dataStack0, callStack0 #) #) #) = timeItT (eval' dataStack callStack bytecodeFile0) s6
+      !(# s7, !(# !time, (# !dataStack0, !callStack0 #) #) #) = timeItT (eval' dataStack callStack bytecodeFile0) s6
 
       !(# s8, _ #) = printResult time dataStack0 callStack0 s7
    in (# s8, () #)
@@ -165,7 +168,7 @@ main' s0 =
     printResult time dataStack0 callStack0 s0 =
       let !(# s1, _ #) = unIO (putStr "\nresult: ") s0
 
-          !(# s2, arr0 #) = freezeDataStack# dataStack0 s1
+          !(# s2, !arr0 #) = freezeDataStack# dataStack0 s1
           !(# s3, !_ #) = printArrayBounds 0# (sizeofArray# arr0 -# 1#) arr0 s2
           !(# s4, _ #) = unIO (putStrLn $ "time taken: " <> showTime time) s3
        in (# s4, (# #) #)
@@ -205,7 +208,7 @@ data Lift a = Lift a
 eval :: Context -> State# RealWorld -> (# State# RealWorld, (# DataStack# RealWorld, CallStack# RealWorld #) #)
 eval (Context dataStack callStack ip constants _ functions code) s0 =
   let !codeSize = sizeofByteArray# code `quotInt#` 4#
-      !(# s1, (Lift dataStack0, Lift callStack0) #) = catch# (go dataStack callStack codeSize ip) handler s0 -- catch# (go dataStack callStack codeSize ip) printMachineStateOnError s0
+      !(# s1, (Lift !dataStack0, Lift !callStack0) #) = catch# (go dataStack callStack codeSize ip) handler s0 -- catch# (go dataStack callStack codeSize ip) printMachineStateOnError s0
    in (# s1, (# dataStack0, callStack0 #) #)
   where
     go :: DataStack# RealWorld -> CallStack# RealWorld -> Int# -> Int# -> State# RealWorld -> (# State# RealWorld, (Lift (DataStack# RealWorld), Lift (CallStack# RealWorld)) #)
@@ -214,11 +217,13 @@ eval (Context dataStack callStack ip constants _ functions code) s0 =
         1# -> (# s0, (Lift dataStack, Lift callStack) #)
         _ ->
 #if DEBUG == 1
-          let !_ = unsafePerformIO (putStrLn $ "code size=(expected=" <> show (I# size) <> ", real=" <> show (I# (sizeofByteArray# code `quotInt#` 4#)) <> "), access at=" <> show (I# ip0)) in
+          let !_ = unsafePerformIO (putStrLn $ "code size=(expected=" <> show (I# size) <> ", real=" <> show (I# (sizeofByteArray# code `quotInt#` 4#)) <> "), access at=" <> show (I# ip0))
+              !_ = debugCallStack# callStack s0
+           in
 #endif
           case word32ToWord# (indexWord32Array# code ip0) of
             BYTECODE_RET## ->
-              let !(# s1, off #) = popCallStack# callStack s0
+              let !(# s1, !off #) = popCallStack# callStack s0
 #if DEBUG == 1
                   !_ = unsafePerformIO (putStrLn $ "> Returning to address " <> show (I# off))
 #endif
@@ -232,31 +237,31 @@ eval (Context dataStack callStack ip constants _ functions code) s0 =
 #if DEBUG == 1
                   !_ = unsafePerformIO (putStrLn $ "> Computing primitive at index " <> show (W32# idx))
 #endif
-                  !(# s1, stack0 #) = f dataStack s0
+                  !(# s1, !stack0 #) = f dataStack s0
                in go stack0 callStack size (ip0 +# 2#) s1
             BYTECODE_PUSH## ->
               let !idx = indexWord32Array# code (ip0 +# 1#)
                   (# !cst #) = indexArray# constants (int32ToInt# (word32ToInt32# idx))
-                  !(# s1, stack0 #) = pushDataStack# dataStack cst s0
+                  !(# s1, !stack0 #) = pushDataStack# dataStack cst s0
 #if DEBUG == 1
                   !_ = unsafePerformIO (putStrLn $ "> Pushing constant #" <> show (W32# idx) <> " (" <> showValue# cst <> ")")
 #endif
                in go stack0 callStack size (ip0 +# 2#) s1
             BYTECODE_JUMP## ->
               let !idx = indexWord32Array# code (ip0 +# 1#)
-                  !(# I# off #) = indexArray# functions (int32ToInt# (word32ToInt32# idx))
-                  !(# s1, stack0 #) = pushCallStack# callStack (ip0 +# 2#) s0
+                  (# I# off #) = indexArray# functions (int32ToInt# (word32ToInt32# idx))
+                  !(# s1, !stack0 #) = pushCallStack# callStack (ip0 +# 2#) s0
 #if DEBUG == 1
-                  !_ = unsafePerformIO (putStrLn $ "> Jumping to code offset " <> show (I# off) <> " found at entry #" <> show (W32# idx))
+                  !_ = unsafePerformIO (putStrLn $ "> Jumping to code offset " <> show (I# off) <> " found at entry #" <> show (W32# idx) <> " from ip=" <> show (I# ip0))
 #endif
                in go dataStack stack0 size off s1
             BYTECODE_UNQUOTE## ->
-              let !(# s1, val #) = popDataStack# dataStack s0 in
+              let !(# s1, !val #) = popDataStack# dataStack s0 in
               case val of
                 VQuote# off ->
-                  let !(# s2, stack0 #) = pushCallStack# callStack (ip0 +# 1#) s1
+                  let !(# s2, !stack0 #) = pushCallStack# callStack (ip0 +# 1#) s1
 #if DEBUG == 1
-                      !_ = unsafePerformIO (putStrLn $ "> Unquotting quote found at offset " <> show (I# off))
+                      !_ = unsafePerformIO (putStrLn $ "> Unquotting quote found at offset " <> show (I# off) <> " from ip=" <> show (I# ip0))
 #endif
                    in go dataStack stack0 size off s2
                 val -> raise# (TypeError $ "Not a quote: " <> showValue# val)

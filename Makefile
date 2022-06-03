@@ -4,7 +4,7 @@ EXECUTABLE := VM
 GHC_FLAGS = -Weverything -Wno-missing-import-lists -Wno-unsafe -Wno-name-shadowing -Wno-missing-export-lists
 
 GHC_FLAGS_RELEASE = -O2 -rtsopts -flate-dmd-anal -fspecialise-aggressively -flate-specialise -fstatic-argument-transformation -DDEBUG=0
-GHC_FLAGS_DEBUG = -debug -g3 -O0 -rtsopts -DDEBUG=1 -lasan
+GHC_FLAGS_DEBUG = -debug -g3 -O0 -rtsopts -DDEBUG=1
             
 GHC_EXTS := -XStrict -XNoStarIsType -XNoImplicitPrelude
 
@@ -16,11 +16,11 @@ RR_TRACE_DIR := rr_traces
 all: VM
 
 VM: release
-	./$(EXECUTABLE)
+	-./$(EXECUTABLE)
 
 debugging: debug
 	-mkdir $(RR_TRACE_DIR)
-	-env _RR_TRACE_DIR=$(RR_TRACE_DIR) $(RR) record $(EXECUTABLE)-debug # --args +RTS -V0 -DS -Dg -Dn
+	-env _RR_TRACE_DIR=$(RR_TRACE_DIR) $(RR) record -n $(EXECUTABLE)-debug --args +RTS -V0 -DS -Dg -Dn
 	$(RR) replay ./$(RR_TRACE_DIR)/latest-trace
 	
 
