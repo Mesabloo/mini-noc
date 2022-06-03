@@ -9,13 +9,12 @@ Here are the last known performance results on my machine:
 
 | `fact(15)` | `ack(3, 6)` |
 | :--------: | :---------: |
-|   ~5µs   |    ~31.5ms    |
+|   ~5µs   |   ~30.5ms   |
 
------------------------
+---
 
 :warning: This is very experimental.
 Expect to see some weird and ugly very unsafe Haskell code, relying on GHC's own internal libraries and boot packages (and nothing else).
 I am proud of what I have been able to do, though I would not recommend anybody doing this at all.
 
------------------------
-
+---

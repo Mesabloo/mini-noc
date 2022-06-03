@@ -75,14 +75,14 @@ example3 = example2 <> example2 <> [AIdentifier "+"]
 -- | Computation time:
 --
 --   [Original interpreter] ~6-7us
---   [Optimized VM] ~2.5us
+--   [Optimized VM] ~2.35us
 example4 :: Expr
 example4 = example3 <> example3 <> [AIdentifier "pop", AIdentifier "dup", AIdentifier "+"]
 
 -- | Computation time:
 --
 --   [Original interpreter] ~150ms
---   [Optimized VM] ???
+--   [Optimized VM] ~30.5ms
 example5 :: Expr
 example5 = [AInteger 3, AInteger 6, AIdentifier "ack"]
 
@@ -139,7 +139,7 @@ main = IO main'
 
 main' :: State# RealWorld -> (# State# RealWorld, () #)
 main' s0 =
-  let !expr = example5
+  let !expr = example4
       !(# s1, _ #) = unIO (putStr "> ") s0
       !(# s2, _ #) = unIO (print expr) s1
       !(# s3, bytecodeFile0 #) = compile expr withBindings s2
