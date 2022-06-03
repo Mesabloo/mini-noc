@@ -67,10 +67,12 @@ import Data.String (String)
 import Data.Text (Text)
 import GHC.Err (undefined)
 import GHC.Exception (Exception)
-import GHC.Exts (Array#, Char (C#), Char#, Double (D#), Double#, Int (I#), Int#, MutableArray#, MutableByteArray#, RealWorld, State#, copyMutableArray#, copyMutableByteArray#, eqChar#, getSizeofMutableByteArray#, newArray#, newByteArray#, newPinnedByteArray#, quotInt#, raise#, readArray#, readIntArray#, resizeMutableByteArray#, sizeofMutableArray#, unsafeFreezeArray#, writeArray#, writeIntArray#, (*#), (+#), (==#), (==##), (>=#))
+import GHC.Exts (Array#, Char (C#), Char#, Double (D#), Double#, Int (I#), Int#, MutableArray#, MutableByteArray#, RealWorld, State#, copyMutableArray#, eqChar#, getSizeofMutableByteArray#, newArray#, newByteArray#, quotInt#, readArray#, readIntArray#, resizeMutableByteArray#, sizeofMutableArray#, unsafeFreezeArray#, writeArray#, writeIntArray#, (*#), (+#), (==#), (==##), (>=#))
+#if STACK_SAFE_OPERATIONS == 1
+import GHC.Exts (raise#)
+#endif
 #if DEBUG == 1
 import GHC.Exts (indexIntArray#, unsafeFreezeByteArray#, (-#))
-import GHC.Int (Int (I#))
 import GHC.IO (unsafePerformIO, unIO)
 #endif
 import GHC.Show (Show, show)
@@ -78,7 +80,7 @@ import GHC.Show (Show, show)
 import System.IO (putStrLn, putStr)
 #endif
 import GHC.Types (RuntimeRep (IntRep, TupleRep), TYPE, UnliftedRep, Type)
-import Variables (MutableIntVar#, getAndDecrementIntVar#, incrementAndGetMutableIntVar#, newIntVar#, readIntVar#)
+import Variables (MutableIntVar#, getAndDecrementIntVar#, incrementAndGetIntVar#, newIntVar#, readIntVar#)
 
 -- | Tried popping from an empty stack.
 type StackUnderflow :: Type
@@ -112,7 +114,7 @@ newCallStack# s0 =
 pushCallStack# :: CallStack# s -> Int# -> State# s -> (# State# s, CallStack# s #)
 pushCallStack# (CallStack (# arr, ptr #)) offset s0 =
   let !(# s1, arr0 #) = resizeCallStack# arr ptr s0
-      !(# s2, ptrPlusOne #) = incrementAndGetMutableIntVar# ptr s1
+      !(# s2, ptrPlusOne #) = incrementAndGetIntVar# ptr s1
       !s3 = writeIntArray# arr0 ptrPlusOne offset s2
    in (# s3, CallStack (# arr0, ptr #) #)
 {-# INLINEABLE pushCallStack# #-}
@@ -120,13 +122,15 @@ pushCallStack# (CallStack (# arr, ptr #)) offset s0 =
 {- ORMOLU_DISABLE -}
 
 -- | Pop the top of the call stack, throwing a 'StackUnderflowException' when the stack is already empty.
-popCallStack# :: CallStack# s -> State# s -> (# State# s, Int# #)
+popCallStack# :: CallStack# RealWorld -> State# RealWorld -> (# State# RealWorld, Int# #)
 popCallStack# (CallStack (# arr, ptr #)) s0 =
   let !(# s1, ptrValue #) = getAndDecrementIntVar# ptr s0
    in
 #if STACK_SAFE_OPERATIONS == 1
        case ptrValue of
-         -1# -> raise# StackUnderflow
+         -1# ->
+           let !(# !_, !_ #) = incrementAndGetIntVar# ptr s1
+            in raise# StackUnderflow
          _ ->
 #endif
            readIntArray# arr ptrValue s1
@@ -206,7 +210,7 @@ newDataStack# s0 =
 pushDataStack# :: DataStack# s -> Value# -> State# s -> (# State# s, DataStack# s #)
 pushDataStack# (DataStack (# arr, ptr #)) val s0 =
   let !(# s1, arr0 #) = resizeDataStack# arr ptr s0
-      !(# s2, ptrPlusOne #) = incrementAndGetMutableIntVar# ptr s1
+      !(# s2, ptrPlusOne #) = incrementAndGetIntVar# ptr s1
       !s3 = writeArray# arr0 ptrPlusOne val s2
    in (# s3, DataStack (# arr0, ptr #) #)
 {-# INLINEABLE pushDataStack# #-}
@@ -218,8 +222,10 @@ popDataStack# (DataStack (# arr, ptr #)) s0 =
   let !(# s1, ptrValue #) = getAndDecrementIntVar# ptr s0
    in
 #if STACK_SAFE_OPERATIONS == 1
-       case ptrValue >=# 0# of
-         0# -> raise# StackUnderflow
+       case ptrValue of
+         -1# ->
+          let !(# !_, !_ #) = incrementAndGetIntVar# ptr s1
+           in raise# StackUnderflow
          _ ->
 #endif
            readArray# arr ptrValue s1
@@ -232,8 +238,10 @@ peekDataStack# (DataStack (# arr, ptr #)) s0 =
   let !(# s1, ptrValue #) = readIntVar# ptr s0
    in
 #if STACK_SAFE_OPERATIONS == 1
-      case ptrValue >=# 0# of
-        0# -> raise# StackUnderflow
+      case ptrValue of
+        -1# ->
+           let !(# !_, !_ #) = incrementAndGetIntVar# ptr s1
+            in raise# StackUnderflow
         _ ->
 #endif
           readArray# arr ptrValue s1

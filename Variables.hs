@@ -38,13 +38,13 @@ writeIntVar# (MutableIntVar# arr) = writeIntArray# arr 0#
 {-# INLINE writeIntVar# #-}
 
 -- | Increments a variable by one and returns its new value.
-incrementAndGetMutableIntVar# :: MutableIntVar# s -> State# s -> (# State# s, Int# #)
-incrementAndGetMutableIntVar# var s0 =
+incrementAndGetIntVar# :: MutableIntVar# s -> State# s -> (# State# s, Int# #)
+incrementAndGetIntVar# var s0 =
   let !(# s1, val #) = readIntVar# var s0
       !valPlusOne = val +# 1#
       !s2 = writeIntVar# var valPlusOne s1
    in (# s2, valPlusOne #)
-{-# INLINEABLE incrementAndGetMutableIntVar# #-}
+{-# INLINEABLE incrementAndGetIntVar# #-}
 
 -- | Decrements the variable by one, and returns its old value.
 getAndDecrementIntVar# :: MutableIntVar# s -> State# s -> (# State# s, Int# #)

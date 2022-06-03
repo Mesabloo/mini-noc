@@ -139,7 +139,7 @@ main = IO main'
 
 main' :: State# RealWorld -> (# State# RealWorld, () #)
 main' s0 =
-  let !expr = example4
+  let !expr = example5
       !(# s1, _ #) = unIO (putStr "> ") s0
       !(# s2, _ #) = unIO (print expr) s1
       !(# s3, bytecodeFile0 #) = compile expr withBindings s2
@@ -181,6 +181,7 @@ main' s0 =
           !(# s3, !_ #) = printArrayBounds 0# (sizeofArray# arr0 -# 1#) arr0 s2
           !(# s4, _ #) = unIO (putStrLn $ "time taken: " <> showTime time) s3
        in (# s4, (# #) #)
+    {-# INLINE printResult #-}
 {-# INLINE main' #-}
 
 -- | Print all the elements of the given array within the specified bounds.
@@ -258,7 +259,7 @@ eval (Context dataStack callStack ip constants _ functions code) s0 =
                in go stack0 callStack size (ip0 +# 2#) s1
             BYTECODE_JUMP## ->
               let !idx = indexWord32Array# code (ip0 +# 1#)
-                  (# I# off #) = indexArray# functions (int32ToInt# (word32ToInt32# idx))
+                  !(# I# !off #) = indexArray# functions (int32ToInt# (word32ToInt32# idx))
                   !(# s1, !stack0 #) = pushCallStack# callStack (ip0 +# 2#) s0
 #if DEBUG == 1
                   !_ = unsafePerformIO (putStrLn $ "> Jumping to code offset " <> show (I# off) <> " found at entry #" <> show (W32# idx) <> " from ip=" <> show (I# ip0))
@@ -278,7 +279,7 @@ eval (Context dataStack callStack ip constants _ functions code) s0 =
 
     handler e s0 =
       let !(# s1, _ #) = unIO (putStrLn "Received exception") s0
-          !() = raise# e
+          -- !() = raise# e
        in (# s1, (Lift dataStack, Lift callStack) #)
 
     -- printMachineStateOnError e s0 = case fromException @EvalError e of
