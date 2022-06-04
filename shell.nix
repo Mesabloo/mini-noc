@@ -1,5 +1,5 @@
 { pkgs ? import ./nixpkgs.nix
-, compiler ? "922"
+, compiler ? "HEAD"
 }:
 
 # let
@@ -24,6 +24,8 @@
 # in
 
 let
+  lib = pkgs.lib;
+
   ghc = pkgs.haskell.compiler."ghc${compiler}";
   hls = pkgs.haskell-language-server.override {
     supportedGhcVersions = [ compiler ];
@@ -40,10 +42,9 @@ pkgs.mkShell {
 
   buildInputs = with pkgs; [
     ghc
-    hls
 
     gnumake
     rr
-  ];
+  ] ++ lib.optional (compiler != "HEAD") hls;
 }
 

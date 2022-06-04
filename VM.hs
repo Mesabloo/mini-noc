@@ -22,7 +22,7 @@
 {-# LANGUAGE Unsafe #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
-#include "./ByteCode.h"
+#include "./Bytecode.h"
 
 import Bytecode (BytecodeFile (File), CodeTable#, ConstantTable#, FunctionTable#, SymbolTable#, printBytecodeFile)
 import Compiler (compile)
@@ -33,14 +33,14 @@ import Data.Semigroup ((<>))
 import Data.String (String)
 import Data.Text (Text)
 import Expr (Atom (..), Expr)
-import GHC.Exts (Array#, Double (..), Double#, Int (..), Int#, RealWorld, State#, TYPE,catch#, indexArray#, indexWord32Array#, int32ToInt#, quotInt#, raise#, sizeofArray#, sizeofByteArray#,word32ToInt32#, word32ToWord#, (*##), (+#), (-#), (<##), (>#), (>=#))
+import GHC.Exts (Array#, Double (..), Double#, Int (..), Int#, RealWorld, State#, TYPE, catch#, indexArray#, indexIntArray#, indexWord32Array#, int32ToInt#, quotInt#, raise#, sizeofArray#, sizeofByteArray#, word32ToInt32#, word32ToWord#, (*##), (+#), (-#), (<##), (>#), (>=#))
 import GHC.IO (IO (..), unIO, unsafePerformIO)
-import GHC.Types (RuntimeRep (TupleRep), UnliftedRep, Type)
+import GHC.Types (RuntimeRep (TupleRep), Type, UnliftedRep)
 #if DEBUG == 1
 import GHC.Word (Word32 (W32#))
 #endif
 import Primitives (TypeError (TypeError))
-import Runtime.Stack (CallStack#, DataStack#, freezeDataStack#, newCallStack#, newDataStack#, popCallStack#, popDataStack#, pushCallStack#, pushDataStack#, StackUnderflow)
+import Runtime.Stack (CallStack#, DataStack#, StackUnderflow, freezeDataStack#, newCallStack#, newDataStack#, popCallStack#, popDataStack#, pushCallStack#, pushDataStack#)
 #if DEBUG == 1
 import Runtime.Stack (debugCallStack#)
 #endif
@@ -264,7 +264,7 @@ eval (Context dataStack callStack ip constants _ functions code) s0 =
                in go stack0 callStack size (ip0 +# 2#) s1
             BYTECODE_JUMP## ->
               let !idx = indexWord32Array# code (ip0 +# 1#)
-                  !(# I# !off #) = indexArray# functions (int32ToInt# (word32ToInt32# idx))
+                  !off = indexIntArray# functions (int32ToInt# (word32ToInt32# idx))
                   !(# s1, !stack0 #) = pushCallStack# callStack (ip0 +# 2#) s0
 #if DEBUG == 1
                   !_ = unsafePerformIO (putStrLn $ "> Jumping to code offset " <> show (I# off) <> " found at entry #" <> show (W32# idx) <> " from ip=" <> show (I# ip0))

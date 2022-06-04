@@ -20,7 +20,7 @@ VM: release
 
 debugging: debug
 	-mkdir $(RR_TRACE_DIR)
-	-env _RR_TRACE_DIR=$(RR_TRACE_DIR) $(RR) record -n $(EXECUTABLE)-debug --args +RTS -V0 -DS -Dg -Dn
+	-env _RR_TRACE_DIR=$(RR_TRACE_DIR) $(RR) record -n $(EXECUTABLE)-debug --args +RTS -V0 -DS -Dg -Dn -t
 	$(RR) replay ./$(RR_TRACE_DIR)/latest-trace
 	
 

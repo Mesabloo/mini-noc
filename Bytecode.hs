@@ -11,15 +11,18 @@
 {-# LANGUAGE DataKinds #-}
 #endif
 
+#include "MachDeps.h"
+
 module Bytecode where
 
+#define WORD_SIZE_IN_BYTES (WORD_SIZE_IN_BITS# `quotInt#` 8# )
+
 import Data.Function (($))
-import Data.Int (Int)
 import Data.Semigroup ((<>))
 import Data.Text (Text)
 import Data.Text qualified as Text
 import GHC.Err (undefined)
-import GHC.Exts (Array#, ByteArray#, Int (I#), Int#, RealWorld, State#, Word32#, indexArray#, indexWord32Array#, quotInt#, remInt#, sizeofArray#, sizeofByteArray#, (+#), (>=#))
+import GHC.Exts (Array#, ByteArray#, Int (I#), Int#, RealWorld, State#, Word32#, indexArray#, indexIntArray#, indexWord32Array#, quotInt#, remInt#, sizeofArray#, sizeofByteArray#, (+#), (>=#))
 import GHC.IO (unIO)
 import GHC.Show (show)
 import GHC.Types (RuntimeRep (Word32Rep), TYPE, Type, UnliftedType)
@@ -34,11 +37,13 @@ type ConstantTable# = Array# Value#
 type SymbolTable# :: UnliftedType
 type SymbolTable# = Array# Text
 
+-- | Holds 'Int#'s internally.
 type FunctionTable# :: UnliftedType
-type FunctionTable# = Array# Int -- NOTE: this really has to be a ByteArray# with custom accessors
+type FunctionTable# = ByteArray#
 
+-- | Holds 'Word32#'s internally.
 type CodeTable# :: UnliftedType
-type CodeTable# = ByteArray# -- NOTE: this really needs to be a ByteArray# with custom accessors
+type CodeTable# = ByteArray#
 
 -- | The layout of a bytecode memory file.
 type BytecodeFile :: Type
@@ -59,7 +64,7 @@ printBytecodeFile :: BytecodeFile -> State# RealWorld -> (# State# RealWorld, (#
 printBytecodeFile (File cstTable symTable funTable codeTable ip) s0 =
   let !cstTableSize = sizeofArray# cstTable
       !symTableSize = sizeofArray# symTable
-      !funTableSize = sizeofArray# funTable
+      !funTableSize = sizeofByteArray# funTable `quotInt#` WORD_SIZE_IN_BYTES
       !codeTableSize = sizeofByteArray# codeTable `quotInt#` 4#
 
       !(# s1, _ #) = unIO (putStrLn "-----| CONSTANTS |-----") s0
@@ -101,8 +106,8 @@ printFunctionTable table size s0 = go 0# s0
     go x s0 = case x >=# size of
       1# -> (# s0, (# #) #)
       0# ->
-        let (# off #) = indexArray# table x
-            !(# s1, !_ #) = unIO (putStrLn $ show (I# x) <> ":\t+" <> show off) s0
+        let !off = indexIntArray# table x
+            !(# s1, !_ #) = unIO (putStrLn $ show (I# x) <> ":\t+" <> show (I# off)) s0
          in go (x +# 1#) s1
       _ -> undefined
 
