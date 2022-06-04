@@ -34,7 +34,7 @@ import GHC.Num ((+))
 import GHC.Show (Show, show)
 import GHC.Types (Type)
 import GHC.Word (Word32 (W32#))
-import Primitives (add, dup, eq, ifthenelse, pop, rot31, sub, swap, times)
+import Primitives (add, dup, eq, ifthenelse, lessthan, pop, rot31, sub, swap, times)
 import Runtime.Value (Bool# (..), Closure, Value# (..), eqValue#)
 import Text.Read (read)
 
@@ -322,6 +322,9 @@ compileAtoms (atom : expr) constants constantsPtr symbols symbolsPtr functions f
        in (# s1, (# constants0, symbols, functions, code0 #) #)
     compileAtom (AIdentifier "=") constants symbols functions code s0 =
       let !(# s1, (# constants0, code0 #) #) = insertBuiltin eq 8# constants constantsPtr code codePtr s0
+       in (# s1, (# constants0, symbols, functions, code0 #) #)
+    compileAtom (AIdentifier "<") constants symbols functions code s0 =
+      let !(# s1, (# constants0, code0 #) #) = insertBuiltin lessthan 9# constants constantsPtr code codePtr s0
        in (# s1, (# constants0, symbols, functions, code0 #) #)
     compileAtom (AIdentifier name) constants symbols functions code s0 =
       case (# Text.head name, Text.tail name #) of

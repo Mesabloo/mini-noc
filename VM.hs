@@ -110,6 +110,13 @@ example10 = [AQuote [AQuote [AInteger 10], AIdentifier "unquote"], AIdentifier "
 example11 :: Expr
 example11 = [AQuote [AInteger 10, AQuote [AInteger 12], AIdentifier "unquote"], AIdentifier "unquote"]
 
+-- | Computation time:
+--
+--   [Original interpreter] ???
+--   [Optimized VM] ~117ms
+example12 :: Expr
+example12 = [AInteger 28, AIdentifier "fib"]
+
 ------------------------------------------------------------------
 
 showTime :: Double# -> String
@@ -144,7 +151,7 @@ main = IO (catch# main' rethrow)
 
 main' :: State# RealWorld -> (# State# RealWorld, () #)
 main' s0 =
-  let !expr = example5
+  let !expr = example12
       !(# s1, _ #) = unIO (putStr "> ") s0
       !(# s2, _ #) = unIO (print expr) s1
       !(# s3, bytecodeFile0 #) = compile expr withBindings s2
@@ -161,7 +168,8 @@ main' s0 =
     withBindings :: [(Text, Expr)]
     withBindings =
       [ ("fact", fact),
-        ("ack", ack)
+        ("ack", ack),
+        ("fib", fib)
       ]
 
     eval' :: DataStack# RealWorld -> CallStack# RealWorld -> BytecodeFile -> State# RealWorld -> (# State# RealWorld, (# DataStack# RealWorld, CallStack# RealWorld #) #)
@@ -370,4 +378,29 @@ ack =
       ], -- [n m (m=0) [(n+1)] [(ack(m-1,1) | ack(m-1,ack(m,n-1)))]]
     AIdentifier "if", -- [n m [(n+1) | (ack(m-1,1) | ack(m-1,ack(m,n-1)))]]
     AIdentifier "unquote" -- [(n+1 | ack(m-1,1) | ack(m-1,ack(m,n-1)))]
+  ]
+
+fib :: Expr
+fib =
+  [ -- [n]
+    AIdentifier "dup", -- [n n]
+    AInteger 2, -- [n n 2]
+    AIdentifier "<", -- [n (n<2)]
+    AQuote -- > [n]
+      [],
+    -- [n (n<2) [n]]
+    AQuote
+      [ -- > [n]
+        AIdentifier "dup", -- > [n n]
+        AInteger 1, -- > [n n 1]
+        AIdentifier "-", -- > [n (n-1)]
+        AIdentifier "fib", -- > [n fib(n-1)]
+        AIdentifier "swap", -- > [fib(n-1) n]
+        AInteger 2, -- > [fib(n-1) n 2]
+        AIdentifier "-", -- > [fib(n-1) (n-2)]
+        AIdentifier "fib", -- > [fib(n-1) fib(n-2)]
+        AIdentifier "+" -- > [fib(n-1)+fib(n-2)]
+      ], -- [n (n<2) [n] [fib(n-1)+fib(n-2)]
+    AIdentifier "if", -- [[n] | [fib(n-1)+fib(n-2)]]
+    AIdentifier "unquote" -- [n | fib(n-1)+fib(n-2)]
   ]
