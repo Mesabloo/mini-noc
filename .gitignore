@@ -1,7 +1,10 @@
 .gdbinit
 VM-debug
 VM
+VM-prof
 *.o
 *.hi
 .ccls-cache/
 rr_traces/
+*.prof
+*.prof.html

@@ -21,7 +21,6 @@ import GHC.Show (Show (show))
 
 -- | An expression is a list of atoms.
 type Expr :: Type
-
 type Expr = [Atom]
 
 instance {-# OVERLAPPING #-} Show Expr where
@@ -42,8 +41,6 @@ data Atom
     ACharacter Char
   | -- | A classic boolean (true or false).
     ABoolean Bool
-  | -- | A simple character string.
-    AString Text
 
 instance Show Atom where
   show (AQuote ex) = "[" <> show ex <> "]"
@@ -52,4 +49,3 @@ instance Show Atom where
   show (AFloat d) = show d
   show (ACharacter c) = show c
   show (ABoolean b) = show b
-  show (AString txt) = show txt

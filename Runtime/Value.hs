@@ -10,7 +10,7 @@ module Runtime.Value
     showBool#,
 
     -- * Values
-    Value# (VQuote#, VDouble#, VInteger#, VCharacter#, VBoolean#, VString#, VPrimitive#),
+    Value# (VQuote#, VDouble#, VInteger#, VCharacter#, VBoolean#, VPrimitive#),
     showValue#,
     eqValue#,
     Closure,

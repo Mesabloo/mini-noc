@@ -35,6 +35,7 @@ pop stack s0 =
   let !(# s1, _ #) = popDataStack# stack s0
    in (# s1, stack #)
 {-# NOINLINE pop #-}
+{-# SCC pop "prim-pop" #-}
 
 add :: Closure
 add stack s0 =
@@ -44,6 +45,7 @@ add stack s0 =
         (# VInteger# i1, VInteger# i2 #) -> pushDataStack# stack (VInteger# (i2 +# i1)) s2
         _ -> raise# $ toException $ TypeError $ "Expected two ints for reducer '+' (found " <> showValue# v1 <> ", " <> showValue# v2 <> ")"
 {-# NOINLINE add #-}
+{-# SCC add "prim-add" #-}
 
 times :: Closure
 times stack s0 =
@@ -53,6 +55,7 @@ times stack s0 =
         (# VInteger# i1, VInteger# i2 #) -> pushDataStack# stack (VInteger# (i2 *# i1)) s2
         _ -> raise# $ toException $ TypeError $ "Expected two ints for reducer '*' (found " <> showValue# v1 <> ", " <> showValue# v2 <> ")"
 {-# NOINLINE times #-}
+{-# SCC times "prim-times" #-}
 
 sub :: Closure
 sub stack s0 =
@@ -62,12 +65,14 @@ sub stack s0 =
         (# VInteger# i1, VInteger# i2 #) -> pushDataStack# stack (VInteger# (i2 -# i1)) s2
         _ -> raise# $ toException $ TypeError $ "Expected two ints for reducer '-' (found " <> showValue# v1 <> ", " <> showValue# v2 <> ")"
 {-# NOINLINE sub #-}
+{-# SCC sub "prim-sub" #-}
 
 dup :: Closure
 dup stack s0 =
   let !(# s1, v #) = peekDataStack# stack s0
    in pushDataStack# stack v s1
 {-# NOINLINE dup #-}
+{-# SCC dup "prim-dup" #-}
 
 swap :: Closure
 swap stack s0 =
@@ -76,6 +81,7 @@ swap stack s0 =
       !(# s3, stack0 #) = pushDataStack# stack v1 s2
    in pushDataStack# stack0 v2 s3
 {-# NOINLINE swap #-}
+{-# SCC swap "prim-swap" #-}
 
 rot31 :: Closure
 rot31 stack s0 =
@@ -86,6 +92,7 @@ rot31 stack s0 =
       !(# s5, stack1 #) = pushDataStack# stack0 v3 s4
    in pushDataStack# stack1 v2 s5
 {-# NOINLINE rot31 #-}
+{-# SCC rot31 "prim-rot31" #-}
 
 rot3_1 :: Closure
 rot3_1 stack s0 =
@@ -96,6 +103,7 @@ rot3_1 stack s0 =
       !(# s5, stack1 #) = pushDataStack# stack0 v3 s4
    in pushDataStack# stack1 v1 s5
 {-# NOINLINE rot3_1 #-}
+{-# SCC rot3_1 "prim-rot3_1" #-}
 
 ifthenelse :: Closure
 ifthenelse stack s0 =
@@ -107,6 +115,7 @@ ifthenelse stack s0 =
         VBoolean# False# -> pushDataStack# stack vElse s3
         _ -> raise# $ toException $ TypeError "Expected boolean as condition for if-then-else"
 {-# NOINLINE ifthenelse #-}
+{-# SCC ifthenelse "prim-if" #-}
 
 eq :: Closure
 eq stack s0 =
@@ -117,6 +126,7 @@ eq stack s0 =
         (# VDouble# d1, VDouble# d2 #) -> pushDataStack# stack (VBoolean# (Bool# (d2 ==## d1))) s2
         _ -> undefined -- TODO
 {-# NOINLINE eq #-}
+{-# SCC eq "prim-eq" #-}
 
 lessthan :: Closure
 lessthan stack s0 =
@@ -127,3 +137,4 @@ lessthan stack s0 =
         (# VDouble# d1, VDouble# d2 #) -> pushDataStack# stack (VBoolean# (Bool# (d2 <## d1))) s2
         _ -> undefined -- TODO
 {-# NOINLINE lessthan #-}
+{-# SCC lessthan "prim-lessthan" #-}

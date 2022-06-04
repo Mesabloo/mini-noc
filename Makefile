@@ -5,6 +5,7 @@ GHC_FLAGS = -Weverything -Wno-missing-import-lists -Wno-unsafe -Wno-name-shadowi
 
 GHC_FLAGS_RELEASE = -O2 -rtsopts -flate-dmd-anal -fspecialise-aggressively -flate-specialise -fstatic-argument-transformation -DDEBUG=0
 GHC_FLAGS_DEBUG = -debug -g3 -O0 -rtsopts -DDEBUG=1
+GHC_FLAGS_PROF = -rtsopts -prof -fprof-auto -DPROF=1 -DDEBUG=0
             
 GHC_EXTS := -XStrict -XNoStarIsType -XNoImplicitPrelude
 
@@ -22,6 +23,10 @@ debugging: debug
 	-mkdir $(RR_TRACE_DIR)
 	-env _RR_TRACE_DIR=$(RR_TRACE_DIR) $(RR) record -n $(EXECUTABLE)-debug --args +RTS -V0 -DS -Dg -Dn -t
 	$(RR) replay ./$(RR_TRACE_DIR)/latest-trace
+
+profiling: prof
+	-./$(EXECUTABLE)-prof +RTS -p -pa
+	profiteur $(EXECUTABLE)-prof.prof
 	
 
 debug: $(SOURCES)
@@ -30,7 +35,10 @@ debug: $(SOURCES)
 release: $(SOURCES)
 	$(GHC) -o $(EXECUTABLE) $^ $(GHC_FLAGS_RELEASE) $(GHC_FLAGS) $(GHC_EXTS)
 
+prof: $(SOURCES)
+	$(GHC) -o $(EXECUTABLE)-prof $^ $(GHC_FLAGS_PROF) $(GHC_FLAGS) $(GHC_EXTS)
+
 .PHONY: clean
 clean: 
-	-rm -r $(SOURCES:.hs=.o) $(SOURCES:.hs=.hi) $(EXECUTABLE) $(EXECUTABLE)-debug
+	-rm -r $(SOURCES:.hs=.o) $(SOURCES:.hs=.hi) $(EXECUTABLE) $(EXECUTABLE)-debug $(EXECUTABLE)-prof
 	-yes | rm -r $(RR_TRACE_DIR)

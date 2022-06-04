@@ -40,7 +40,7 @@ module Runtime.Internal
     -- * Values
     Bool# (.., False#, True#),
     showBool#,
-    Value# (.., VQuote#, VDouble#, VInteger#, VCharacter#, VBoolean#, VString#, VPrimitive#),
+    Value# (.., VQuote#, VDouble#, VInteger#, VCharacter#, VBoolean#, VPrimitive#),
     showValue#,
     eqValue#,
     Closure,
@@ -67,7 +67,6 @@ import Data.Function (($))
 #endif
 import Data.Semigroup ((<>))
 import Data.String (String)
-import Data.Text (Text)
 import GHC.Exception (Exception)
 import GHC.Exts (Array#, Char (C#), Char#, Double (D#), Double#, Int (I#), Int#, MutableArray#, MutableByteArray#, RealWorld, State#, copyMutableArray#, eqChar#, getSizeofMutableByteArray#, newArray#, newByteArray#, quotInt#, readArray#, readIntArray#, resizeMutableByteArray#, sizeofMutableArray#, unsafeFreezeArray#, writeArray#, writeIntArray#, (*#), (+#), (==#), (==##), (>=#))
 #if STACK_SAFE_OPERATIONS == 1
@@ -95,7 +94,7 @@ instance Exception StackUnderflow
 ----------------------------- STACKS -----------------------------------
 ------------------------------------------------------------------------
 
--- | Holds 'Word32#'s internally, which are simply offsets from the beginning of the @CODE@ section.
+-- | Holds 'Int#'s internally, which are simply offsets from the beginning of the @CODE@ section.
 type CallStack# :: Type -> TYPE ('TupleRep '[UnliftedRep, UnliftedRep])
 newtype CallStack# s = CallStack (# MutableByteArray# s, MutableIntVar# s #)
 
@@ -330,28 +329,25 @@ showBool# False# = "false"
 type Value# :: Type
 data Value#
   = Value
-      (# Int#| Double#| Int#| Char#| Bool#| Text| (# Closure, Int# #) #)
+      (# Int#| Double#| Int#| Char#| Bool#|  (# Closure, Int# #) #)
 
 pattern VQuote# :: Int# -> Value#
-pattern VQuote# idx = Value (# idx | | | | | | #)
+pattern VQuote# idx = Value (# idx | | | | | #)
 
 pattern VDouble# :: Double# -> Value#
-pattern VDouble# d = Value (# | d | | | | | #)
+pattern VDouble# d = Value (# | d | | | | #)
 
 pattern VInteger# :: Int# -> Value#
-pattern VInteger# i = Value (# | | i | | | | #)
+pattern VInteger# i = Value (# | | i | | | #)
 
 pattern VCharacter# :: Char# -> Value#
-pattern VCharacter# c = Value (# | | | c | | | #)
+pattern VCharacter# c = Value (# | | | c | | #)
 
 pattern VBoolean# :: Bool# -> Value#
-pattern VBoolean# b = Value (# | | | | b | | #)
-
-pattern VString# :: Text -> Value#
-pattern VString# txt = Value (# | | | | | txt | #)
+pattern VBoolean# b = Value (# | | | | b | #)
 
 pattern VPrimitive# :: Closure -> Int# -> Value#
-pattern VPrimitive# f id = Value (# | | | | | | (# f, id #) #)
+pattern VPrimitive# f id = Value (# | | | | | (# f, id #) #)
 
 -- | Returns a 'String' representation of a 'Value#'.
 showValue# :: Value# -> String
@@ -360,7 +356,6 @@ showValue# (VDouble# d) = show (D# d)
 showValue# (VInteger# i) = show (I# i)
 showValue# (VCharacter# c) = show (C# c)
 showValue# (VBoolean# b) = showBool# b
-showValue# (VString# txt) = show txt
 showValue# (VPrimitive# _ id) = "prim@" <> show (I# id)
 showValue# _ = "???"
 {-# INLINE showValue# #-}
@@ -371,7 +366,6 @@ eqValue# (VDouble# d1) (VDouble# d2) = d1 ==## d2
 eqValue# (VInteger# i1) (VInteger# i2) = i1 ==# i2
 eqValue# (VCharacter# c1) (VCharacter# c2) = eqChar# c1 c2
 eqValue# (VBoolean# (Bool# b1)) (VBoolean# (Bool# b2)) = b1 ==# b2
-eqValue# (VString# t1) (VString# t2) = if t1 == t2 then 1# else 0#
 eqValue# (VQuote# o1) (VQuote# o2) = o1 ==# o2
 eqValue# (VPrimitive# _ id1) (VPrimitive# _ id2) = id1 ==# id2
 eqValue# _ _ = 0#

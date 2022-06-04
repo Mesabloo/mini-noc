@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE ImportQualifiedPost #-}
@@ -98,10 +99,10 @@ compile expr bindings s0 =
         go expr bindings constants constantsPtr symbols symbolsPtr functions functionsPtr code codePtr s4
 
       !(# s6, I# constantsPtr0 #) = readMutVar# constantsPtr s5
-      !(# s7, constants1 #) = freezeArray# constants0 0# constantsPtr0 s6
+      !(# s7, !constants1 #) = freezeArray# constants0 0# constantsPtr0 s6
 
       !(# s8, I# symbolsPtr0 #) = readMutVar# symbolsPtr s7
-      !(# s9, symbols1 #) = freezeArray# symbols0 0# symbolsPtr0 s8
+      !(# s9, !symbols1 #) = freezeArray# symbols0 0# symbolsPtr0 s8
 
       !(# s10, I# functionsPtr0 #) = readMutVar# functionsPtr s9
       !(# s11, functions1 #) = newPinnedByteArray# (functionsPtr0 *# WORD_SIZE_IN_BYTES) s10
@@ -113,14 +114,14 @@ compile expr bindings s0 =
       -- !s13 = shrinkMutableByteArray# code0 (codePtr0 *# 4#) s12
       !(# s15, code1 #) = newPinnedByteArray# (codePtr0 *# 4#) s14
       !s16 = copyMutableByteArray# code0 0# code1 0# (codePtr0 *# 4#) s15
-      !(# s17, code2 #) = unsafeFreezeByteArray# code1 s16
+      !(# s17, !code2 #) = unsafeFreezeByteArray# code1 s16
    in -- NOTE: symbolsPtr0 ==# functionsPtr0 must be 1#
 
       (# s17, File constants1 symbols1 functions2 code2 ip #)
   where
     createConstantArray :: State# RealWorld -> (# State# RealWorld, (# MutableArray# RealWorld Value#, MutVar# RealWorld Int #) #)
     createConstantArray s0 =
-      let !(# s1, constants #) = newArray# 10# (VInteger# 0#) s0
+      let !(# s1, constants #) = (newArray# 10# $! VInteger# 0#) s0
           !(# s2, ptr #) = newMutVar# (0 :: Int) s1
        in (# s2, (# constants, ptr #) #)
 
@@ -186,6 +187,7 @@ compile expr bindings s0 =
           !s15 = writeMutVar# functionsPtr (I# (functionsPtr0 +# 1#)) s14
           !s16 = writeMutVar# symbolsPtr (I# (symbolsPtr0 +# 1#)) s15
        in compileAdditionalBindings binds constants0 constantsPtr symbols1 symbolsPtr functions1 functionsPtr code2 codePtr s16
+{-# INLINEABLE compile #-}
 
 compileExpr ::
   Expr ->
@@ -276,19 +278,16 @@ compileAtoms (atom : expr) constants constantsPtr symbols symbolsPtr functions f
       State# RealWorld ->
       (# State# RealWorld, (# MutableArray# RealWorld Value#, MutableArray# RealWorld Text, MutableByteArray# RealWorld, MutableByteArray# RealWorld #) #)
     compileAtom (AInteger (I# i)) constants symbols functions code s0 =
-      let !(# s1, (# constants0, code0 #) #) = insertConstant (VInteger# i) constants constantsPtr code codePtr s0
+      let !(# s1, (# constants0, code0 #) #) = (insertConstant $! VInteger# i) constants constantsPtr code codePtr s0
        in (# s1, (# constants0, symbols, functions, code0 #) #)
     compileAtom (ACharacter (C# c)) constants symbols functions code s0 =
-      let !(# s1, (# constants0, code0 #) #) = insertConstant (VCharacter# c) constants constantsPtr code codePtr s0
+      let !(# s1, (# constants0, code0 #) #) = (insertConstant $! VCharacter# c) constants constantsPtr code codePtr s0
        in (# s1, (# constants0, symbols, functions, code0 #) #)
     compileAtom (ABoolean b) constants symbols functions code s0 =
-      let !(# s1, (# constants0, code0 #) #) = insertConstant (VBoolean# (if b then True# else False#)) constants constantsPtr code codePtr s0
+      let !(# s1, (# constants0, code0 #) #) = (insertConstant $! VBoolean# if b then True# else False#) constants constantsPtr code codePtr s0
        in (# s1, (# constants0, symbols, functions, code0 #) #)
     compileAtom (AFloat (D# d)) constants symbols functions code s0 =
-      let !(# s1, (# constants0, code0 #) #) = insertConstant (VDouble# d) constants constantsPtr code codePtr s0
-       in (# s1, (# constants0, symbols, functions, code0 #) #)
-    compileAtom (AString txt) constants symbols functions code s0 =
-      let !(# s1, (# constants0, code0 #) #) = insertConstant (VString# txt) constants constantsPtr code codePtr s0
+      let !(# s1, (# constants0, code0 #) #) = (insertConstant $! VDouble# d) constants constantsPtr code codePtr s0
        in (# s1, (# constants0, symbols, functions, code0 #) #)
     compileAtom (AIdentifier "unquote") constants symbols functions code s0 =
       let !(# s1, I# codePtr0 #) = readMutVar# codePtr s0
@@ -328,9 +327,9 @@ compileAtoms (atom : expr) constants constantsPtr symbols symbolsPtr functions f
        in (# s1, (# constants0, symbols, functions, code0 #) #)
     compileAtom (AIdentifier name) constants symbols functions code s0 =
       case (# Text.head name, Text.tail name #) of
-        (# '$', offset #) ->
+        (# '$', !offset #) ->
           let !(I# off) = read (Text.unpack offset)
-              !(# s1, (# constants0, code0 #) #) = insertConstant (VQuote# off) constants constantsPtr code codePtr s0
+              !(# s1, (# constants0, code0 #) #) = (insertConstant $! VQuote# off) constants constantsPtr code codePtr s0
            in (# s1, (# constants0, symbols, functions, code0 #) #)
         _ ->
           let !(# s1, index #) = findIndexFromReducerName symbols name s0

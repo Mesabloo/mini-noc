@@ -154,7 +154,7 @@ main' s0 =
   let !expr = example12
       !(# s1, _ #) = unIO (putStr "> ") s0
       !(# s2, _ #) = unIO (print expr) s1
-      !(# s3, bytecodeFile0 #) = compile expr withBindings s2
+      !(# s3, !bytecodeFile0 #) = compile expr withBindings s2
       !(# s4, _ #) = printBytecodeFile bytecodeFile0 s3
 
       !(# s5, !dataStack #) = newDataStack# s4
@@ -171,6 +171,7 @@ main' s0 =
         ("ack", ack),
         ("fib", fib)
       ]
+    {-# INLINE withBindings #-}
 
     eval' :: DataStack# RealWorld -> CallStack# RealWorld -> BytecodeFile -> State# RealWorld -> (# State# RealWorld, (# DataStack# RealWorld, CallStack# RealWorld #) #)
     eval' stack cstack (File constants symbols functions code ip) s0 =
@@ -293,7 +294,7 @@ eval (Context dataStack callStack ip constants _ functions code) s0 =
     handler :: SomeException -> State# RealWorld -> (# State# RealWorld, (Lift (DataStack# RealWorld), Lift (CallStack# RealWorld)) #)
     handler (!exn :: SomeException) s0 =
       let !(# s1, () #) = case fromException @StackUnderflow exn of
-            Just !_ -> unIO (putStrLn $ "\n[!] Tried popping a value off an empty stack.") s0
+            Just !_ -> unIO (putStrLn "\n[!] Tried popping a value off an empty stack.") s0
             Nothing -> (# s0, () #)
 
           !(# s2, () #) = case fromException @TypeError exn of
@@ -301,7 +302,9 @@ eval (Context dataStack callStack ip constants _ functions code) s0 =
             Nothing -> (# s1, () #)
 
        in (# s2, raise# exn #)
+    {-# INLINE handler #-}
 {-# INLINE eval #-}
+{-# SCC eval "evaluation" #-}
 
 {- ORMOLU_ENABLE -}
 

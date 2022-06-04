@@ -43,6 +43,8 @@ pkgs.mkShell {
   buildInputs = with pkgs; [
     ghc
 
+    llvmPackages_14.llvm
+
     gnumake
     rr
   ] ++ lib.optional (compiler != "HEAD") hls;
