@@ -1,4 +1,6 @@
-{ pkgs ? import ./nixpkgs.nix }:
+{ pkgs ? import ./nixpkgs.nix
+, compiler ? "922"
+}:
 
 # let
 #   ghc-dev = pkgs.haskell.compiler.ghcHEAD.override {
@@ -20,6 +22,14 @@
 #     });
 
 # in
+
+let
+  ghc = pkgs.haskell.compiler."ghc${compiler}";
+  hls = pkgs.haskell-language-server.override {
+    supportedGhcVersions = [ compiler ];
+  };
+
+in
 pkgs.mkShell {
   name = "mini-noc";
 
@@ -29,7 +39,9 @@ pkgs.mkShell {
   # ];
 
   buildInputs = with pkgs; [
-    haskell.compiler.ghcHEAD
+    ghc
+    hls
+
     gnumake
     rr
   ];

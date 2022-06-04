@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE MonoLocalBinds #-}
@@ -6,6 +7,9 @@
 {-# LANGUAGE UnboxedTuples #-}
 {-# LANGUAGE Unsafe #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+#if __GLASGOW_HASKELL__ < 930
+{-# LANGUAGE DataKinds #-}
+#endif
 
 module Bytecode where
 
@@ -18,26 +22,22 @@ import GHC.Err (undefined)
 import GHC.Exts (Array#, ByteArray#, Int (I#), Int#, RealWorld, State#, Word32#, indexArray#, indexWord32Array#, quotInt#, remInt#, sizeofArray#, sizeofByteArray#, (+#), (>=#))
 import GHC.IO (unIO)
 import GHC.Show (show)
-import GHC.Types (RuntimeRep (Word32Rep), UnliftedType, Type, TYPE)
+import GHC.Types (RuntimeRep (Word32Rep), TYPE, Type, UnliftedType)
 import GHC.Word (Word32 (W32#))
 import Numeric (showHex)
 import Runtime.Value (Value#, showValue#)
 import System.IO (putStr, putStrLn)
 
 type ConstantTable# :: UnliftedType
-
 type ConstantTable# = Array# Value#
 
 type SymbolTable# :: UnliftedType
-
 type SymbolTable# = Array# Text
 
 type FunctionTable# :: UnliftedType
-
 type FunctionTable# = Array# Int -- NOTE: this really has to be a ByteArray# with custom accessors
 
 type CodeTable# :: UnliftedType
-
 type CodeTable# = ByteArray# -- NOTE: this really needs to be a ByteArray# with custom accessors
 
 -- | The layout of a bytecode memory file.
@@ -71,13 +71,13 @@ printBytecodeFile (File cstTable symTable funTable codeTable ip) s0 =
       !(# s7, _ #) = unIO (putStr "-----| CODE |-----") s6
       !(# s8, _ #) = printCodeTable codeTable codeTableSize s7
       !(# s9, _ #) = unIO (putStrLn $ "IP=" <> show (I# ip) <> ", END=" <> show (I# codeTableSize)) s8
-   in (# s9, (##) #)
+   in (# s9, (# #) #)
 
 printConstantTable :: ConstantTable# -> Int# -> State# RealWorld -> (# State# RealWorld, (# #) #)
 printConstantTable table size s0 = go 0# s0
   where
     go x s0 = case x >=# size of
-      1# -> (# s0, (##) #)
+      1# -> (# s0, (# #) #)
       0# ->
         let (# val #) = indexArray# table x
             !(# s1, !_ #) = unIO (putStrLn $ show (I# x) <> ":\t" <> showValue# val) s0
@@ -88,7 +88,7 @@ printSymbolTable :: SymbolTable# -> Int# -> State# RealWorld -> (# State# RealWo
 printSymbolTable table size s0 = go 0# s0
   where
     go x s0 = case x >=# size of
-      1# -> (# s0, (##) #)
+      1# -> (# s0, (# #) #)
       0# ->
         let (# sym #) = indexArray# table x
             !(# s1, !_ #) = unIO (putStrLn $ show (I# x) <> ":\t" <> show (Text.unpack sym)) s0
@@ -99,7 +99,7 @@ printFunctionTable :: FunctionTable# -> Int# -> State# RealWorld -> (# State# Re
 printFunctionTable table size s0 = go 0# s0
   where
     go x s0 = case x >=# size of
-      1# -> (# s0, (##) #)
+      1# -> (# s0, (# #) #)
       0# ->
         let (# off #) = indexArray# table x
             !(# s1, !_ #) = unIO (putStrLn $ show (I# x) <> ":\t+" <> show off) s0
@@ -112,7 +112,7 @@ printCodeTable table size s0 = go 0# s0
     go x s0 = case x >=# size of
       1# ->
         let !(# s1, _ #) = unIO (putStrLn "") s0
-         in (# s1, (##) #)
+         in (# s1, (# #) #)
       0# ->
         let !code = indexWord32Array# table x
             !(# s1, !_ #) = case remInt# x 8# of
@@ -125,9 +125,7 @@ printCodeTable table size s0 = go 0# s0
 ------------------------------------------------------------------------------------
 
 type ByteCode :: Type
-
 type ByteCode = Word32
 
 type ByteCode# :: TYPE 'Word32Rep
-
 type ByteCode# = Word32#

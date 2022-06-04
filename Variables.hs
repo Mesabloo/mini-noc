@@ -7,13 +7,16 @@
 {-# LANGUAGE UnliftedNewtypes #-}
 {-# LANGUAGE Unsafe #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+#if __GLASGOW_HASKELL__ < 930
+{-# LANGUAGE DataKinds #-}
+#endif
 
 #include "MachDeps.h"
 
 module Variables where
 
 import GHC.Exts (Int#, MutableByteArray#, State#, newByteArray#, readIntArray#, writeIntArray#, (+#), (-#))
-import GHC.Types (UnliftedType, Type)
+import GHC.Types (Type, UnliftedType)
 
 -- | A strict, unlifted, boxed mutable variable to an 'Int#' value.
 type MutableIntVar# :: Type -> UnliftedType
