@@ -102,10 +102,8 @@ compile expr bindings s0 =
       !(# s13, functions1 #) = newPinnedByteArray# (functionsPtr0 *# WORD_SIZE_IN_BYTES) s12
       !s14 = copyMutableByteArray# functions0 0# functions1 0# (functionsPtr0 *# WORD_SIZE_IN_BYTES) s13
       !(# s15, !functions2 #) = unsafeFreezeByteArray# functions1 s14
-      -- !(# s11, functions1 #) = freezeArray# functions0 0# functionsPtr0 s10
 
       !(# s16, codePtr0 #) = readIntVar# codePtr s15
-      -- !s13 = shrinkMutableByteArray# code0 (codePtr0 *# 4#) s12
       !(# s17, code1 #) = newPinnedByteArray# (codePtr0 *# 4#) s16
       !s18 = copyMutableByteArray# code0 0# code1 0# (codePtr0 *# 4#) s17
       !(# s19, !code2 #) = unsafeFreezeByteArray# code1 s18
