@@ -30,7 +30,7 @@ example4 = example3 <> example3 <> [AIdentifier "pop", AIdentifier "dup", AIdent
 -- | Computation time:
 --
 --   [Original interpreter] ~150ms
---   [Optimized VM] ~28ms
+--   [Optimized VM] ~26ms
 example5 :: Expr
 example5 = [AInteger 3, AInteger 6, AIdentifier "ack"]
 {-# NOINLINE example5 #-}
@@ -66,7 +66,7 @@ example11 = [AQuote [AInteger 10, AQuote [AInteger 12], AIdentifier "unquote"], 
 -- | Computation time:
 --
 --   [Original interpreter] ???
---   [Optimized VM] ~96.5ms
+--   [Optimized VM] ~92ms
 example12 :: Expr
 example12 = [AInteger 28, AIdentifier "fib"]
 {-# NOINLINE example12 #-}

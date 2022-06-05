@@ -86,14 +86,14 @@ showTime = go "s"
 main :: IO ()
 main = IO (catch# main' rethrow)
   where
-    rethrow :: a -> State# RealWorld -> (# State# RealWorld, () #)
-    rethrow exn s0 = (# s0, raise# exn #)
+    rethrow :: SomeException -> State# RealWorld -> (# State# RealWorld, () #)
+    rethrow !exn s0 = (# s0, raise# exn #)
     {-# INLINE rethrow #-}
 {-# INLINE main #-}
 
 main' :: State# RealWorld -> (# State# RealWorld, () #)
 main' s0 =
-  let !expr = example6
+  let !expr = example5
       !(# s1, _ #) = unIO (putStr "> ") s0
       !(# s2, _ #) = unIO (print expr) s1
       !(# s3, !bytecodeFile0 #) = compile expr withBindings s2
@@ -116,9 +116,8 @@ main' s0 =
     {-# NOINLINE withBindings #-}
 
     eval' :: DataStack# RealWorld -> CallStack# RealWorld -> BytecodeFile -> State# RealWorld -> (# State# RealWorld, (# DataStack# RealWorld, CallStack# RealWorld #) #)
-    eval' stack cstack (File constants symbols functions code ip) s0 =
-      let !codeSize = sizeofByteArray# code `quotInt#` 4#
-       in eval stack cstack ip constants symbols functions code codeSize s0
+    eval' stack cstack (File constants symbols functions code ip) =
+      eval stack cstack ip constants symbols functions code (sizeofByteArray# code `quotInt#` 4#)
     {-# INLINE eval' #-}
 
     timeItT :: (State# RealWorld -> (# State# RealWorld, (# DataStack# RealWorld, CallStack# RealWorld #) #)) -> State# RealWorld -> (# State# RealWorld, (# Double#, (# DataStack# RealWorld, CallStack# RealWorld #) #) #)
@@ -138,7 +137,7 @@ main' s0 =
           !(# s3, !_ #) = printArrayBounds 0# ((sizeofByteArray# arr0 -# 1#) `quotInt#` VALUE_SIZE_IN_BYTES) arr0 s2
           !(# s4, _ #) = unIO (putStrLn $ "time taken: " <> showTime time) s3
        in (# s4, (# #) #)
-    {-# INLINE printResult #-}
+    {-# NOINLINE printResult #-}
 {-# INLINE main' #-}
 
 -- | Print all the elements of the given array within the specified bounds.
@@ -263,9 +262,6 @@ eval dataStack callStack ip constants _ functions code size s0 =
        in (# s2, raise# exn #)
     {-# INLINE handler #-}
 {-# INLINE eval #-}
-{-# SCC eval "evaluation" #-}
--- NOTE: do /not/ remove this SCC. It seems to improve performances (about 4ms gained on `28 fib`).
--- I am quite unsure why this does this, as a SCC shouldn't have any runtime cost at all.
 
 {- ORMOLU_ENABLE -}
 

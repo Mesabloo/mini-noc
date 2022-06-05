@@ -9,7 +9,7 @@ Here are the last known performance results on my machine:
 
 |          | `fact(15)`⁽¹⁾ | `ack(3,6)` | `fib(28)`⁽¹⁾ |
 | :------: | :--------------: | :--------: | :-------------: |
-| Mini-Noc |      ~4µs      |   ~27ms   |      ~96ms      |
+| Mini-Noc |      ~4µs      |   ~26ms   |      ~92ms      |
 |  Python  |     ~1.8µs     |  ~22.4ms  |     ~105ms     |
 
 Note that this is meant to be 100% Haskell code.

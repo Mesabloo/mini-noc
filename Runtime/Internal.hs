@@ -115,7 +115,7 @@ pushCallStack# (CallStack (# arr, ptr #)) offset s0 =
       !(# s2, ptrPlusOne #) = incrementAndGetIntVar# ptr s1
       !s3 = writeIntArray# arr0 ptrPlusOne offset s2
    in (# s3, CallStack (# arr0, ptr #) #)
-{-# INLINEABLE pushCallStack# #-}
+{-# INLINE pushCallStack# #-}
 
 {- ORMOLU_DISABLE -}
 
@@ -132,7 +132,7 @@ popCallStack# (CallStack (# arr, ptr #)) s0 =
          _ ->
 #endif
            readIntArray# arr ptrValue s1
-{-# INLINEABLE popCallStack# #-}
+{-# INLINE popCallStack# #-}
 
 -- {- ORMOLU_ENABLE -}
 
@@ -140,7 +140,7 @@ popCallStack# (CallStack (# arr, ptr #)) s0 =
 --   would go out of bounds.
 --   That way, you can continue pushing values onto the stack.
 --
---   Note that a new 'MutableByteArray#' is returned, as resizing may not be done in-place. (see 'resizeMutableByteArray#')
+--   Nte that a new 'MutableByteArray#' is returned, as resizing may not be done in-place. (see 'resizeMutableByteArray#')
 resizeCallStack# :: MutableByteArray# s -> MutableIntVar# s -> State# s -> (# State# s, MutableByteArray# s #)
 resizeCallStack# arr ptr s0 =
   let !(# s1, ptrValue #) = readIntVar# ptr s0
@@ -160,7 +160,7 @@ resizeCallStack# arr ptr s0 =
           let !_ = unsafePerformIO (putStrLn $ "Callstack: not expanding") in
 #endif
           (# s2, arr #)
-{-# INLINEABLE resizeCallStack# #-}
+{-# INLINE resizeCallStack# #-}
 
 #if DEBUG == 1
 debugCallStack# :: CallStack# RealWorld -> State# RealWorld -> State# RealWorld
@@ -209,7 +209,7 @@ pushDataStack# (DataStack (# arr, ptr #)) val s0 =
       !(# s2, ptrPlusOne #) = incrementAndGetIntVar# ptr s1
       !s3 = encodeValue0# val arr0 ptrPlusOne s2
    in (# s3, DataStack (# arr0, ptr #) #)
-{-# INLINEABLE pushDataStack# #-}
+{-# INLINE pushDataStack# #-}
 
 {- ORMOLU_DISABLE -}
 
@@ -225,7 +225,7 @@ popDataStack# (DataStack (# arr, ptr #)) s0 =
          _ ->
 #endif
            decodeValue0# arr ptrValue s1
-{-# INLINEABLE popDataStack# #-}
+{-# INLINE popDataStack# #-}
 
 -- | Get the top of the data stack without actually removing it.
 --   This may be useful to inspect data before doing anything.
@@ -241,7 +241,7 @@ peekDataStack# (DataStack (# arr, ptr #)) s0 =
         _ ->
 #endif
           decodeValue0# arr ptrValue s1
-{-# INLINEABLE peekDataStack# #-}
+{-# INLINE peekDataStack# #-}
 
 {- ORMOLU_ENABLE -}
 
@@ -259,7 +259,7 @@ freezeDataStack# (DataStack (# arr, ptr #)) s0 =
       !s3 = copyMutableByteArray# arr 0# arr0 0# size s2
       !(# s4, arr1 #) = unsafeFreezeByteArray# arr0 s3
    in (# s4, arr1 #)
-{-# INLINEABLE freezeDataStack# #-}
+{-# INLINE freezeDataStack# #-}
 
 -- | TODO: documentation
 resizeDataStack# :: MutableByteArray# s -> MutableIntVar# s -> State# s -> (# State# s, MutableByteArray# s #)
@@ -281,7 +281,7 @@ resizeDataStack# arr ptr s0 =
           let !_ = unsafePerformIO (putStrLn $ "Datastack: not expanding") in
 #endif
           (# s2, arr #)
-{-# INLINEABLE resizeDataStack# #-}
+{-# INLINE resizeDataStack# #-}
 
 #if DEBUG == 1
 debugDataStack# :: DataStack# RealWorld -> State# RealWorld -> State# RealWorld
@@ -406,7 +406,7 @@ decodeValue1# arr ptr s0 =
     1## -> (# s0, VDouble# (unsafeCoerce# valueAsWord) #)
     2## -> (# s0, VInteger# (unsafeCoerce# valueAsWord) #)
     3## -> (# s0, VCharacter# (unsafeCoerce# valueAsWord) #)
-    4## -> (# s0, VBoolean# (Bool# (word2Int# valueAsWord)) #)
+    4## -> (# s0, VBoolean# (unsafeCoerce# valueAsWord) #)
     -- _ -> undefined
     --
     -- NOTE: ignore the warning on this, because if we uncomment this line, performances are way worse
