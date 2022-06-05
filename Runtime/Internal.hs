@@ -361,7 +361,6 @@ showValue# (VDouble# d) = show (F# d)
 showValue# (VInteger# i) = show (I# i)
 showValue# (VCharacter# c) = show (C# c)
 showValue# (VBoolean# b) = showBool# b
-showValue# _ = "???"
 {-# INLINE showValue# #-}
 
 -- | Tests the equality of 'Value#'s and returns '0#' if they differ, or '1#' if they are equal.
@@ -376,7 +375,7 @@ eqValue# _ _ = 0#
 
 decodeValue0# :: MutableByteArray# s -> Int# -> State# s -> (# State# s, Value# #)
 decodeValue0# arr ptr s0 =
-  let baseOffset = ptr *# VALUE_SIZE_IN_BYTES
+  let !baseOffset = ptr *# VALUE_SIZE_IN_BYTES
 
       !(# s1, word8Tag #) = readWord8Array# arr baseOffset s0
       !(# s2, valueAsWord32 #) = readWord8ArrayAsWord32# arr (baseOffset +# 1#) s1
@@ -405,10 +404,10 @@ decodeValue0# arr ptr s0 =
 
 decodeValue1# :: ByteArray# -> Int# -> State# s -> (# State# s, Value# #)
 decodeValue1# arr ptr s0 =
-  let baseOffset = ptr *# VALUE_SIZE_IN_BYTES
+  let !baseOffset = ptr *# VALUE_SIZE_IN_BYTES
 
-      word8Tag = indexWord8Array# arr baseOffset
-      valueAsWord32 = indexWord8ArrayAsWord32# arr (baseOffset +# 1#)
+      !word8Tag = indexWord8Array# arr baseOffset
+      !valueAsWord32 = indexWord8ArrayAsWord32# arr (baseOffset +# 1#)
   in case word8ToWord# word8Tag of
     0## -> (# s0, VQuote# (word2Int# (word32ToWord# valueAsWord32)) #)
     1## -> (# s0, VDouble# (unsafeCoerce# valueAsWord32) #)
@@ -424,9 +423,9 @@ encodeValue0# :: Value# -> MutableByteArray# s -> Int# -> State# s -> State# s
 encodeValue0# val arr ptr s0 =
   let !(# tag, encoded #) = encode#
 
-      baseOffset = ptr *# VALUE_SIZE_IN_BYTES
+      !baseOffset = ptr *# VALUE_SIZE_IN_BYTES
 
-      s1 = writeWord8Array# arr baseOffset tag s0
+      !s1 = writeWord8Array# arr baseOffset tag s0
    in writeWord8ArrayAsWord32# arr (baseOffset +# 1#) encoded s1
   where
     encode# :: (# Word8#, Word32# #)

@@ -70,3 +70,7 @@ example11 = [AQuote [AInteger 10, AQuote [AInteger 12], AIdentifier "unquote"], 
 example12 :: Expr
 example12 = [AInteger 28, AIdentifier "fib"]
 {-# NOINLINE example12 #-}
+
+example13 :: Expr
+example13 = [AInteger 3, AInteger 7, AIdentifier "ack"]
+{-# NOINLINE example13 #-}

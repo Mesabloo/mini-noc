@@ -42,5 +42,5 @@ prof: $(SOURCES)
 
 .PHONY: clean
 clean: 
-	-rm -r $(SOURCES:.hs=.o) $(SOURCES:.hs=.hi) $(EXECUTABLE) $(EXECUTABLE)-debug $(EXECUTABLE)-prof
+	-rm -r $(SOURCES:.hs=.o) $(SOURCES:.hs=.hi) $(EXECUTABLE) $(EXECUTABLE)-debug $(EXECUTABLE)-prof *.prof *.prof.html
 	-yes | rm -r $(RR_TRACE_DIR)

@@ -94,7 +94,7 @@ main = IO (catch# main' rethrow)
 
 main' :: State# RealWorld -> (# State# RealWorld, () #)
 main' s0 =
-  let !expr = example4
+  let !expr = example12
       !(# s1, _ #) = unIO (putStr "> ") s0
       !(# s2, _ #) = unIO (print expr) s1
       !(# s3, !bytecodeFile0 #) = compile expr withBindings s2
@@ -198,13 +198,13 @@ eval dataStack callStack ip constants _ functions code size s0 =
       case ip0 >=# size of
         1# -> (# s0, Lift (# dataStack, callStack #) #)
         _ ->
+          let !opcode = word32ToWord# (indexWord32Array# code ip0)
 #if DEBUG == 1
-          let !_ = unsafePerformIO (putStrLn $ "code size=(expected=" <> show (I# size) <> ", real=" <> show (I# (sizeofByteArray# code `quotInt#` 4#)) <> "), access at=" <> show (I# ip0))
+              !_ = unsafePerformIO (putStrLn $ "code size=(expected=" <> show (I# size) <> ", real=" <> show (I# (sizeofByteArray# code `quotInt#` 4#)) <> "), access at=" <> show (I# ip0))
               _ = debugCallStack# callStack s0
               _ = debugDataStack# dataStack s0
-           in
 #endif
-          case word32ToWord# (indexWord32Array# code ip0) of
+           in case opcode of
             BYTECODE_RET## ->
               let !(# s1, !off #) = popCallStack# callStack s0
 #if DEBUG == 1
@@ -233,7 +233,7 @@ eval dataStack callStack ip constants _ functions code size s0 =
             BYTECODE_JUMP## ->
               let !idx = indexWord32Array# code (ip0 +# 1#)
                   !off = indexIntArray# functions (int32ToInt# (word32ToInt32# idx))
-                  !(# s1, stack0 #) = pushCallStack# callStack (ip0 +# 2#) s0
+                  !(# s1, !stack0 #) = pushCallStack# callStack (ip0 +# 2#) s0
 #if DEBUG == 1
                   !_ = unsafePerformIO (putStrLn $ "> Jumping to code offset " <> show (I# off) <> " found at entry #" <> show (W32# idx) <> " from ip=" <> show (I# ip0))
 #endif
@@ -242,12 +242,11 @@ eval dataStack callStack ip constants _ functions code size s0 =
               let !(# s1, !val #) = popDataStack# dataStack s0
                in case val of
                     VQuote# off ->
-                      {-# SCC "potential-VQuote#-allocs?" #-} 
                       let !(# s2, !stack0 #) = pushCallStack# callStack (ip0 +# 1#) s1
 #if DEBUG == 1
                           !_ = unsafePerformIO (putStrLn $ "> Unquotting quote found at offset " <> show (I# off) <> " from ip=" <> show (I# ip0))
 #endif
-                       in {-# SCC "excuse-me?" #-} go dataStack stack0 off s2
+                       in go dataStack stack0 off s2
                     val -> raise# (toException $ TypeError $ "Not a quote: " <> showValue# val)
             _ -> undefined
     {-# NOINLINE go #-}
@@ -266,6 +265,8 @@ eval dataStack callStack ip constants _ functions code size s0 =
     {-# INLINE handler #-}
 {-# INLINE eval #-}
 {-# SCC eval "evaluation" #-}
+-- NOTE: do /not/ remove this SCC. It seems to improve performances (about 4ms gained on `28 fib`).
+-- I am quite unsure why this does this, as a SCC shouldn't have any runtime cost at all.
 
 {- ORMOLU_ENABLE -}
 
