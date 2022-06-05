@@ -17,7 +17,7 @@ import Data.Semigroup ((<>))
 import Data.Text (Text)
 import Data.Text qualified as Text
 import GHC.Base (Type)
-import GHC.Float (Float)
+import GHC.Float (Double)
 import GHC.Show (Show (show))
 
 -- | An expression is a list of atoms.
@@ -38,7 +38,7 @@ data Atom
   | -- | A classic integer literal (most likely to be either 32 or 64-bit).
     AInteger Int
   | -- | A double-precision floating point literal.
-    AFloat Float
+    AFloat Double
   | -- | A unicode character.
     ACharacter Char
   | -- | A classic boolean (true or false).

@@ -7,17 +7,14 @@
 {-# LANGUAGE UnboxedTuples #-}
 {-# LANGUAGE Unsafe #-}
 {-# LANGUAGE NoImplicitPrelude #-}
-#if __GLASGOW_HASKELL__ < 930
+#if __GLASGOW_HASKELL__ < 903
 {-# LANGUAGE DataKinds #-}
 #endif
 
 #include "MachDeps.h"
+#include "./Common.h"
 
 module Bytecode where
-
-#define WORD_SIZE_IN_BYTES (WORD_SIZE_IN_BITS# `quotInt#` 8# )
-
-#define VALUE_SIZE_IN_BYTES (1# +# 4# )
 
 import Data.Function (($))
 import Data.Semigroup ((<>))

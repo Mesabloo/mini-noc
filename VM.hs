@@ -24,8 +24,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 
 #include "./Bytecode.h"
-
-#define VALUE_SIZE_IN_BYTES (1# +# 4# )
+#include "./Common.h"
 
 import Bytecode (BytecodeFile (File), CodeTable#, ConstantTable#, FunctionTable#, SymbolTable#, printBytecodeFile)
 import Compiler (compile)
@@ -94,7 +93,7 @@ main = IO (catch# main' rethrow)
 
 main' :: State# RealWorld -> (# State# RealWorld, () #)
 main' s0 =
-  let !expr = example12
+  let !expr = example6
       !(# s1, _ #) = unIO (putStr "> ") s0
       !(# s2, _ #) = unIO (print expr) s1
       !(# s3, !bytecodeFile0 #) = compile expr withBindings s2

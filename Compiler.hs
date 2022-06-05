@@ -13,12 +13,9 @@
 {-# LANGUAGE NoStarIsType #-}
 
 #include "./Bytecode.h"
+#include "./Common.h"
 #include "./Primitives.h"
 #include "MachDeps.h"
-
-#define WORD_SIZE_IN_BYTES (WORD_SIZE_IN_BITS# `quotInt#` 8# )
-
-#define VALUE_SIZE_IN_BYTES (1# +# 4# )
 
 module Compiler (compile, UnboundIdentifier (..)) where
 
@@ -32,7 +29,7 @@ import Data.Text qualified as Text
 import Expr (Atom (..), Expr)
 import GHC.Base (($!))
 import GHC.Exception (Exception)
-import GHC.Exts (Array#, Char (C#), Float (F#), Int (I#), Int#, MutableArray#, MutableByteArray#, RealWorld, State#, copyMutableArray#, copyMutableByteArray#, freezeArray#, getSizeofMutableByteArray#, indexArray#, int32ToWord32#, intToInt32#, newArray#, newByteArray#, newPinnedByteArray#, quotInt#, raise#, resizeMutableByteArray#, sizeofArray#, sizeofMutableArray#, unsafeFreezeArray#, unsafeFreezeByteArray#, writeArray#, writeIntArray#, writeWord32Array#, (*#), (+#), (>=#))
+import GHC.Exts (Array#, Char (C#), Double (D#), Int (I#), Int#, MutableArray#, MutableByteArray#, RealWorld, State#, copyMutableArray#, copyMutableByteArray#, freezeArray#, getSizeofMutableByteArray#, indexArray#, int32ToWord32#, intToInt32#, newArray#, newByteArray#, newPinnedByteArray#, quotInt#, raise#, resizeMutableByteArray#, sizeofArray#, sizeofMutableArray#, unsafeFreezeArray#, unsafeFreezeByteArray#, writeArray#, writeIntArray#, writeWord32Array#, (*#), (+#), (>=#))
 import GHC.Show (Show, show)
 import GHC.Types (Type)
 import GHC.Word (Word32 (W32#))
@@ -287,7 +284,7 @@ compileAtoms (atom : expr) constants constantsPtr symbols symbolsPtr functions f
     compileAtom (ABoolean b) constants symbols functions code s0 =
       let !(# s1, (# constants0, code0 #) #) = insertConstant (VBoolean# if b then True# else False#) constants constantsPtr code codePtr s0
        in (# s1, (# constants0, symbols, functions, code0 #) #)
-    compileAtom (AFloat (F# d)) constants symbols functions code s0 =
+    compileAtom (AFloat (D# d)) constants symbols functions code s0 =
       let !(# s1, (# constants0, code0 #) #) = insertConstant (VDouble# d) constants constantsPtr code codePtr s0
        in (# s1, (# constants0, symbols, functions, code0 #) #)
     compileAtom (AIdentifier "unquote") constants symbols functions code s0 =

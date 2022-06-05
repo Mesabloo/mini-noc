@@ -19,7 +19,7 @@ import Data.Semigroup ((<>))
 import Data.String (String)
 import GHC.Err (undefined)
 import GHC.Exception (Exception)
-import GHC.Exts (Int#, ltFloat#, raise#, (*#), (+#), (-#), (<#))
+import GHC.Exts (Int#, raise#, (*#), (+#), (-#), (<#), (<##))
 import GHC.Show (Show)
 import GHC.Types (Type)
 import Runtime.Stack (peekDataStack#, popDataStack#, pushDataStack#)
@@ -148,7 +148,7 @@ lessthan stack s0 =
       !(# s2, v2 #) = popDataStack# stack s1
    in case (# v1, v2 #) of
         (# VInteger# i1, VInteger# i2 #) -> pushDataStack# stack (VBoolean# (Bool# (i2 <# i1))) s2
-        (# VDouble# d1, VDouble# d2 #) -> pushDataStack# stack (VBoolean# (Bool# (d2 `ltFloat#` d1))) s2
+        (# VDouble# d1, VDouble# d2 #) -> pushDataStack# stack (VBoolean# (Bool# (d2 <## d1))) s2
         _ -> undefined -- TODO
 {-# INLINE lessthan #-}
 {-# SCC lessthan "prim-lessthan" #-}

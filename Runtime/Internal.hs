@@ -54,14 +54,7 @@ module Runtime.Internal
 where
 
 #include "MachDeps.h"
-
-#define WORD_SIZE_IN_BYTES (WORD_SIZE_IN_BITS# `quotInt#` 8# )
-
-#define VALUE_SIZE_IN_BYTES (1# +# 4# )
-
-#define INITIAL_CALLSTACK_SIZE 20
-#define INITIAL_DATASTACK_SIZE 100
-#define STACK_SAFE_OPERATIONS 0
+#include "../Common.h"
 
 #if STACK_SAFE_OPERATIONS == 1
 import Control.Exception (toException)
@@ -72,7 +65,7 @@ import Data.Function (($))
 import Data.Semigroup ((<>))
 import Data.String (String)
 import GHC.Exception (Exception)
-import GHC.Exts (Char (C#), Char#, Int (I#), Int#, MutableByteArray#, RealWorld, State#, eqChar#, getSizeofMutableByteArray#, newByteArray#, quotInt#, readIntArray#, resizeMutableByteArray#, writeIntArray#, (*#), (+#), (==#), (>=#), ByteArray#, Float#, Float (F#), eqFloat#, readWord8Array#, word8ToWord#, unsafeCoerce#, copyMutableByteArray#, unsafeFreezeByteArray#, Word32#, readWord8ArrayAsWord32#, writeWord8Array#, writeWord8ArrayAsWord32#, wordToWord8#, indexWord8Array#, indexWord8ArrayAsWord32#, Word8#, word2Int#, word32ToWord#)
+import GHC.Exts (Char (C#), Char#, Int (I#), Int#, MutableByteArray#, RealWorld, State#, eqChar#, getSizeofMutableByteArray#, newByteArray#, quotInt#, readIntArray#, resizeMutableByteArray#, writeIntArray#, (*#), (+#), (==#), (>=#), ByteArray#, Float#, Float (F#), eqFloat#, readWord8Array#, word8ToWord#, unsafeCoerce#, copyMutableByteArray#, unsafeFreezeByteArray#, Word32#, readWord8ArrayAsWord32#, writeWord8Array#, writeWord8ArrayAsWord32#, wordToWord8#, indexWord8Array#, indexWord8ArrayAsWord32#, Word8#, word2Int#, word32ToWord#, Double#, (==##), Double (D#), readWord8ArrayAsWord64#, indexWord8ArrayAsWord64#, writeWord8ArrayAsWord#, readWord8ArrayAsWord#, indexWord8ArrayAsWord#, Word#)
 #if STACK_SAFE_OPERATIONS == 1
 import GHC.Exts (raise#)
 #endif
@@ -334,13 +327,13 @@ showBool# False# = "false"
 {-# INLINE showBool# #-}
 
 -- | The kind of runtime values as an unboxed sum.
-type Value# :: TYPE ('SumRep '[ 'IntRep, 'FloatRep, 'IntRep, 'WordRep, 'IntRep ])
-newtype Value# = Value (# Int#| Float#| Int#| Char#| Bool# #)
+type Value# :: TYPE ('SumRep '[ 'IntRep, 'DoubleRep, 'IntRep, 'WordRep, 'IntRep ])
+newtype Value# = Value (# Int#| Double#| Int#| Char#| Bool# #)
 
 pattern VQuote# :: Int# -> Value#
 pattern VQuote# idx = Value (# idx | | | | #)
 
-pattern VDouble# :: Float# -> Value#
+pattern VDouble# :: Double# -> Value#
 pattern VDouble# d = Value (# | d | | | #)
 
 pattern VInteger# :: Int# -> Value#
@@ -357,7 +350,7 @@ pattern VBoolean# b = Value (# | | | | b #)
 -- | Returns a 'String' representation of a 'Value#'.
 showValue# :: Value# -> String
 showValue# (VQuote# off) = "#" <> show (I# off)
-showValue# (VDouble# d) = show (F# d)
+showValue# (VDouble# d) = show (D# d)
 showValue# (VInteger# i) = show (I# i)
 showValue# (VCharacter# c) = show (C# c)
 showValue# (VBoolean# b) = showBool# b
@@ -365,7 +358,7 @@ showValue# (VBoolean# b) = showBool# b
 
 -- | Tests the equality of 'Value#'s and returns '0#' if they differ, or '1#' if they are equal.
 eqValue# :: Value# -> Value# -> Int#
-eqValue# (VDouble# d1) (VDouble# d2) = d1 `eqFloat#` d2
+eqValue# (VDouble# d1) (VDouble# d2) = d1 ==## d2
 eqValue# (VInteger# i1) (VInteger# i2) = i1 ==# i2
 eqValue# (VCharacter# c1) (VCharacter# c2) = eqChar# c1 c2
 eqValue# (VBoolean# (Bool# b1)) (VBoolean# (Bool# b2)) = b1 ==# b2
@@ -378,13 +371,13 @@ decodeValue0# arr ptr s0 =
   let !baseOffset = ptr *# VALUE_SIZE_IN_BYTES
 
       !(# s1, word8Tag #) = readWord8Array# arr baseOffset s0
-      !(# s2, valueAsWord32 #) = readWord8ArrayAsWord32# arr (baseOffset +# 1#) s1
+      !(# s2, valueAsWord #) = readWord8ArrayAsWord# arr (baseOffset +# 1#) s1
   in case word8ToWord# word8Tag of
-    0## -> (# s2, VQuote# (unsafeCoerce# valueAsWord32) #)
-    1## -> (# s2, VDouble# (unsafeCoerce# valueAsWord32) #)
-    2## -> (# s2, VInteger# (unsafeCoerce# valueAsWord32) #)
-    3## -> (# s2, VCharacter# (unsafeCoerce# valueAsWord32) #)
-    4## -> (# s2, VBoolean# (unsafeCoerce# valueAsWord32) #)
+    0## -> (# s2, VQuote# (unsafeCoerce# valueAsWord) #)
+    1## -> (# s2, VDouble# (unsafeCoerce# valueAsWord) #)
+    2## -> (# s2, VInteger# (unsafeCoerce# valueAsWord) #)
+    3## -> (# s2, VCharacter# (unsafeCoerce# valueAsWord) #)
+    4## -> (# s2, VBoolean# (unsafeCoerce# valueAsWord) #)
     -- _ -> undefined
     --
     -- NOTE: ignore the warning on this, because if we uncomment this line, performances are way worse
@@ -407,13 +400,13 @@ decodeValue1# arr ptr s0 =
   let !baseOffset = ptr *# VALUE_SIZE_IN_BYTES
 
       !word8Tag = indexWord8Array# arr baseOffset
-      !valueAsWord32 = indexWord8ArrayAsWord32# arr (baseOffset +# 1#)
+      !valueAsWord = indexWord8ArrayAsWord# arr (baseOffset +# 1#)
   in case word8ToWord# word8Tag of
-    0## -> (# s0, VQuote# (word2Int# (word32ToWord# valueAsWord32)) #)
-    1## -> (# s0, VDouble# (unsafeCoerce# valueAsWord32) #)
-    2## -> (# s0, VInteger# (word2Int# (word32ToWord# valueAsWord32)) #)
-    3## -> (# s0, VCharacter# (unsafeCoerce# valueAsWord32) #)
-    4## -> (# s0, VBoolean# (Bool# (word2Int# (word32ToWord# valueAsWord32))) #)
+    0## -> (# s0, VQuote# (unsafeCoerce# valueAsWord) #)
+    1## -> (# s0, VDouble# (unsafeCoerce# valueAsWord) #)
+    2## -> (# s0, VInteger# (unsafeCoerce# valueAsWord) #)
+    3## -> (# s0, VCharacter# (unsafeCoerce# valueAsWord) #)
+    4## -> (# s0, VBoolean# (Bool# (word2Int# valueAsWord)) #)
     -- _ -> undefined
     --
     -- NOTE: ignore the warning on this, because if we uncomment this line, performances are way worse
@@ -426,9 +419,9 @@ encodeValue0# val arr ptr s0 =
       !baseOffset = ptr *# VALUE_SIZE_IN_BYTES
 
       !s1 = writeWord8Array# arr baseOffset tag s0
-   in writeWord8ArrayAsWord32# arr (baseOffset +# 1#) encoded s1
+   in writeWord8ArrayAsWord# arr (baseOffset +# 1#) encoded s1
   where
-    encode# :: (# Word8#, Word32# #)
+    encode# :: (# Word8#, Word# #)
     encode# = case val of
       VQuote# off -> (# wordToWord8# 0##, unsafeCoerce# off #)
       VDouble# f -> (# wordToWord8# 1##, unsafeCoerce# f #)

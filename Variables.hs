@@ -7,7 +7,7 @@
 {-# LANGUAGE UnliftedNewtypes #-}
 {-# LANGUAGE Unsafe #-}
 {-# LANGUAGE NoImplicitPrelude #-}
-#if __GLASGOW_HASKELL__ < 930
+#if __GLASGOW_HASKELL__ < 903
 {-# LANGUAGE DataKinds #-}
 #endif
 

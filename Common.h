@@ -1,0 +1,12 @@
+#ifndef COMMON_H
+#define COMMON_H
+
+#define WORD_SIZE_IN_BYTES (WORD_SIZE_IN_BITS# `quotInt#` 8# )
+
+#define VALUE_SIZE_IN_BYTES (1# +# 8# )
+
+#define INITIAL_CALLSTACK_SIZE 20
+#define INITIAL_DATASTACK_SIZE 100
+#define STACK_SAFE_OPERATIONS 0
+
+#endif
