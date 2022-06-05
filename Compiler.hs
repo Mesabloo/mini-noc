@@ -333,7 +333,7 @@ compileAtoms (atom : expr) constants constantsPtr symbols symbolsPtr functions f
     compileAtom (AIdentifier name) constants symbols functions code s0 =
       case (# Text.head name, Text.tail name #) of
         (# '$', !offset #) ->
-          let !(I# off) = read (Text.unpack offset)
+          let !(I# !off) = read (Text.unpack offset)
               !(# s1, (# constants0, code0 #) #) = insertConstant (VQuote# off) constants constantsPtr code codePtr s0
            in (# s1, (# constants0, symbols, functions, code0 #) #)
         _ ->

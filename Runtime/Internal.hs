@@ -86,7 +86,6 @@ import System.IO (putStrLn, putStr)
 #endif
 import GHC.Types (RuntimeRep (..), TYPE, UnliftedRep, Type)
 import Variables (MutableIntVar#, getAndDecrementIntVar#, incrementAndGetIntVar#, newIntVar#, readIntVar#)
-import GHC.Err (undefined)
 
 -- | Tried popping from an empty stack.
 type StackUnderflow :: Type
@@ -391,6 +390,9 @@ decodeValue0# arr ptr s0 =
     2## -> (# s2, VInteger# (unsafeCoerce# valueAsWord32) #)
     3## -> (# s2, VCharacter# (unsafeCoerce# valueAsWord32) #)
     4## -> (# s2, VBoolean# (unsafeCoerce# valueAsWord32) #)
+    -- _ -> undefined
+    --
+    -- NOTE: ignore the warning on this, because if we uncomment this line, performances are way worse
 {-# INLINEABLE decodeValue0# #-}
 
 decodeValue1# :: ByteArray# -> Int# -> State# s -> (# State# s, Value# #)
@@ -405,6 +407,9 @@ decodeValue1# arr ptr s0 =
     2## -> (# s0, VInteger# (word2Int# (word32ToWord# valueAsWord32)) #)
     3## -> (# s0, VCharacter# (unsafeCoerce# valueAsWord32) #)
     4## -> (# s0, VBoolean# (Bool# (word2Int# (word32ToWord# valueAsWord32))) #)
+    -- _ -> undefined
+    --
+    -- NOTE: ignore the warning on this, because if we uncomment this line, performances are way worse
 {-# INLINE decodeValue1# #-}
 
 encodeValue0# :: Value# -> MutableByteArray# s -> Int# -> State# s -> State# s
@@ -423,6 +428,9 @@ encodeValue0# val arr ptr s0 =
       VInteger# i -> (# wordToWord8# 2##, unsafeCoerce# i #)
       VCharacter# c -> (# wordToWord8# 3##, unsafeCoerce# c #)
       VBoolean# b -> (# wordToWord8# 4##, unsafeCoerce# b #)
+      -- _ -> undefined
+      --
+      -- NOTE: ignore the warning on this, because if we uncomment this line, performances are way worse
     {-# INLINE encode# #-}
 {-# INLINE encodeValue0# #-}
     

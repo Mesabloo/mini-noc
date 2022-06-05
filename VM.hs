@@ -18,6 +18,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE UnboxedSums #-}
 {-# LANGUAGE UnboxedTuples #-}
+{-# LANGUAGE UnliftedDatatypes #-}
 {-# LANGUAGE UnliftedNewtypes #-}
 {-# LANGUAGE Unsafe #-}
 {-# LANGUAGE NoImplicitPrelude #-}
@@ -51,18 +52,6 @@ import Runtime.Value (Value# (VQuote#), decodeValue1#, showValue#)
 import System.CPUTime (getCPUTime)
 import System.IO (print, putStr, putStrLn)
 import Prelude (Integer, Show (..), fromIntegral, undefined, ($), ($!), (*), (-))
-
--- | The evaluation context contains the current stacks, instruction pointer and bytecode tables.
-type Context :: Type
-data Context
-  = Context
-      (DataStack# RealWorld)
-      (CallStack# RealWorld)
-      Int#
-      ConstantTable#
-      SymbolTable#
-      FunctionTable#
-      CodeTable#
 
 ------------------------------------------------------------------
 
@@ -122,7 +111,8 @@ main' s0 =
 
     eval' :: DataStack# RealWorld -> CallStack# RealWorld -> BytecodeFile -> State# RealWorld -> (# State# RealWorld, (# DataStack# RealWorld, CallStack# RealWorld #) #)
     eval' stack cstack (File constants symbols functions code ip) s0 =
-      eval (Context stack cstack ip constants symbols functions code) s0
+      let !codeSize = sizeofByteArray# code `quotInt#` 4#
+       in eval stack cstack ip constants symbols functions code codeSize s0
     {-# INLINE eval' #-}
 
     timeItT :: (State# RealWorld -> (# State# RealWorld, (# DataStack# RealWorld, CallStack# RealWorld #) #)) -> State# RealWorld -> (# State# RealWorld, (# Double#, (# DataStack# RealWorld, CallStack# RealWorld #) #) #)
@@ -173,23 +163,32 @@ printArrayBounds low high arr s0 = go low s0
 
 {- ORMOLU_DISABLE -}
 
-type Lift :: TYPE ('TupleRep '[UnliftedRep, UnliftedRep]) -> Type
+type Lift :: TYPE ('TupleRep '[ 'TupleRep '[ UnliftedRep, UnliftedRep ], 'TupleRep '[ UnliftedRep, UnliftedRep ] ]) -> Type
 data Lift a = Lift a
 
-eval :: Context -> State# RealWorld -> (# State# RealWorld, (# DataStack# RealWorld, CallStack# RealWorld #) #)
-eval (Context dataStack callStack ip constants _ functions code) s0 =
-  let !codeSize = sizeofByteArray# code `quotInt#` 4#
-      !(# s1, (Lift !dataStack0, Lift !callStack0) #) = catch# (go dataStack callStack codeSize ip) handler s0
-   in (# s1, (# dataStack0, callStack0 #) #)
+eval ::
+  DataStack# RealWorld ->
+  CallStack# RealWorld ->
+  Int# ->
+  ConstantTable# ->
+  SymbolTable# ->
+  FunctionTable# ->
+  CodeTable# ->
+  Int# ->
+  State# RealWorld ->
+  (# State# RealWorld, (# DataStack# RealWorld, CallStack# RealWorld #) #)
+eval dataStack callStack ip constants _ functions code size s0 =
+  let !(# s1, Lift !res #) = catch# (go dataStack callStack ip) handler s0
+   in (# s1, res #)
   where
-    go :: DataStack# RealWorld -> CallStack# RealWorld -> Int# -> Int# -> State# RealWorld -> (# State# RealWorld, (Lift (DataStack# RealWorld), Lift (CallStack# RealWorld)) #)
-    go dataStack callStack size ip0 s0 =
+    go :: DataStack# RealWorld -> CallStack# RealWorld -> Int# -> State# RealWorld -> (# State# RealWorld, Lift (# DataStack# RealWorld, CallStack# RealWorld #) #)
+    go dataStack callStack ip0 s0 =
       case ip0 >=# size of
-        1# -> (# s0, (Lift dataStack, Lift callStack) #)
+        1# -> (# s0, Lift (# dataStack, callStack #) #)
         _ ->
 #if DEBUG == 1
           let !_ = unsafePerformIO (putStrLn $ "code size=(expected=" <> show (I# size) <> ", real=" <> show (I# (sizeofByteArray# code `quotInt#` 4#)) <> "), access at=" <> show (I# ip0))
-              _ = debugCallStack# callStack s0
+              !_ = debugCallStack# callStack s0
            in
 #endif
           case word32ToWord# (indexWord32Array# code ip0) of
@@ -198,7 +197,7 @@ eval (Context dataStack callStack ip constants _ functions code) s0 =
 #if DEBUG == 1
                   !_ = unsafePerformIO (putStrLn $ "> Returning to address " <> show (I# off))
 #endif
-               in go dataStack callStack size off s1
+               in go dataStack callStack off s1
             BYTECODE_PRIM## ->
 #if DEBUG == 1
               let !_ = unsafePerformIO (putStrLn $ ">> PRIM: get index from offset " <> show (I# (ip0 +# 1#))) in
@@ -209,7 +208,7 @@ eval (Context dataStack callStack ip constants _ functions code) s0 =
                   !_ = unsafePerformIO (putStrLn $ "> Computing primitive at index " <> show (W32# idx))
 #endif
                   !(# s1, stack0 #) = prim off dataStack s0
-               in go stack0 callStack size (ip0 +# 2#) s1
+               in go stack0 callStack (ip0 +# 2#) s1
             BYTECODE_PUSH## ->
               let !idx = indexWord32Array# code (ip0 +# 1#)
                   !(# s1, !cst #) = decodeValue1# constants (int32ToInt# (word32ToInt32# idx)) s0
@@ -217,7 +216,7 @@ eval (Context dataStack callStack ip constants _ functions code) s0 =
 #if DEBUG == 1
                   !_ = unsafePerformIO (putStrLn $ "> Pushing constant #" <> show (W32# idx) <> " (" <> showValue# cst <> ")")
 #endif
-               in go stack0 callStack size (ip0 +# 2#) s2
+               in go stack0 callStack (ip0 +# 2#) s2
             BYTECODE_JUMP## ->
               let !idx = indexWord32Array# code (ip0 +# 1#)
                   !off = indexIntArray# functions (int32ToInt# (word32ToInt32# idx))
@@ -225,20 +224,20 @@ eval (Context dataStack callStack ip constants _ functions code) s0 =
 #if DEBUG == 1
                   !_ = unsafePerformIO (putStrLn $ "> Jumping to code offset " <> show (I# off) <> " found at entry #" <> show (W32# idx) <> " from ip=" <> show (I# ip0))
 #endif
-               in go dataStack stack0 size off s1
+               in go dataStack stack0 off s1
             BYTECODE_UNQUOTE## ->
-              let !(# s1, !val #) = popDataStack# dataStack s0 in
-              case val of
-                VQuote# off ->
-                  let !(# s2, !stack0 #) = pushCallStack# callStack (ip0 +# 1#) s1
+              let !(# s1, !val #) = popDataStack# dataStack s0
+               in {-# SCC "potential-VQuote#-allocs?" #-} case val of
+                    VQuote# off ->
+                      let !(# s2, !stack0 #) = pushCallStack# callStack (ip0 +# 1#) s1
 #if DEBUG == 1
-                      !_ = unsafePerformIO (putStrLn $ "> Unquotting quote found at offset " <> show (I# off) <> " from ip=" <> show (I# ip0))
+                          !_ = unsafePerformIO (putStrLn $ "> Unquotting quote found at offset " <> show (I# off) <> " from ip=" <> show (I# ip0))
 #endif
-                   in go dataStack stack0 size off s2
-                val -> raise# (toException $ TypeError $ "Not a quote: " <> showValue# val)
+                       in go dataStack stack0 off s2
+                    val -> raise# (toException $ TypeError $ "Not a quote: " <> showValue# val)
             _ -> undefined
 
-    handler :: SomeException -> State# RealWorld -> (# State# RealWorld, (Lift (DataStack# RealWorld), Lift (CallStack# RealWorld)) #)
+    handler :: SomeException -> State# RealWorld -> (# State# RealWorld, Lift (# DataStack# RealWorld, CallStack# RealWorld #) #)
     handler (!exn :: SomeException) s0 =
       let !(# s1, () #) = case fromException @StackUnderflow exn of
             Just !_ -> unIO (putStrLn "\n[!] Tried popping a value off an empty stack.") s0

@@ -27,4 +27,9 @@
 --- Unquote (evaluate) the last quote identifier found on the data stack.
 #define BYTECODE_UNQUOTE 0x4
 
+--- We arrived at the end of our bytecode list.
+---
+--- This is used to explicitly break the evaluation loop instead of checking the size.
+#define BYTECODE_EXIT 0x5
+
 #endif
