@@ -17,6 +17,8 @@ module Bytecode where
 
 #define WORD_SIZE_IN_BYTES (WORD_SIZE_IN_BITS# `quotInt#` 8# )
 
+#define VALUE_SIZE_IN_BYTES (1# +# 4# )
+
 import Data.Function (($))
 import Data.Semigroup ((<>))
 import Data.Text (Text)
@@ -28,11 +30,12 @@ import GHC.Show (show)
 import GHC.Types (RuntimeRep (Word32Rep), TYPE, Type, UnliftedType)
 import GHC.Word (Word32 (W32#))
 import Numeric (showHex)
-import Runtime.Value (Value#, showValue#)
+import Runtime.Value (decodeValue1#, showValue#)
 import System.IO (putStr, putStrLn)
 
+-- | Holds 'Value#'s internally.
 type ConstantTable# :: UnliftedType
-type ConstantTable# = Array# Value#
+type ConstantTable# = ByteArray#
 
 type SymbolTable# :: UnliftedType
 type SymbolTable# = Array# Text
@@ -62,7 +65,7 @@ data BytecodeFile
 
 printBytecodeFile :: BytecodeFile -> State# RealWorld -> (# State# RealWorld, (# #) #)
 printBytecodeFile (File cstTable symTable funTable codeTable ip) s0 =
-  let !cstTableSize = sizeofArray# cstTable
+  let !cstTableSize = sizeofByteArray# cstTable `quotInt#` VALUE_SIZE_IN_BYTES
       !symTableSize = sizeofArray# symTable
       !funTableSize = sizeofByteArray# funTable `quotInt#` WORD_SIZE_IN_BYTES
       !codeTableSize = sizeofByteArray# codeTable `quotInt#` 4#
@@ -84,9 +87,9 @@ printConstantTable table size s0 = go 0# s0
     go x s0 = case x >=# size of
       1# -> (# s0, (# #) #)
       0# ->
-        let (# val #) = indexArray# table x
-            !(# s1, !_ #) = unIO (putStrLn $ show (I# x) <> ":\t" <> showValue# val) s0
-         in go (x +# 1#) s1
+        let !(# s1, val #) = decodeValue1# table x s0
+            !(# s2, !_ #) = unIO (putStrLn $ show (I# x) <> ":\t" <> showValue# val) s1
+         in go (x +# 1#) s2
       _ -> undefined
 
 printSymbolTable :: SymbolTable# -> Int# -> State# RealWorld -> (# State# RealWorld, (# #) #)

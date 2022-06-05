@@ -13,9 +13,12 @@
 {-# LANGUAGE NoStarIsType #-}
 
 #include "./Bytecode.h"
+#include "./Primitives.h"
 #include "MachDeps.h"
 
 #define WORD_SIZE_IN_BYTES (WORD_SIZE_IN_BITS# `quotInt#` 8# )
+
+#define VALUE_SIZE_IN_BYTES (1# +# 4# )
 
 module Compiler (compile, UnboundIdentifier (..)) where
 
@@ -30,13 +33,12 @@ import Expr (Atom (..), Expr)
 import GHC.Base (($!))
 import GHC.Err (undefined)
 import GHC.Exception (Exception)
-import GHC.Exts (Array#, Char (C#), Double (D#), Int (I#), Int#, MutVar#, MutableArray#, MutableByteArray#, RealWorld, State#, copyMutableArray#, copyMutableByteArray#, freezeArray#, getSizeofMutableByteArray#, indexArray#, int32ToWord32#, intToInt32#, newArray#, newByteArray#, newMutVar#, newPinnedByteArray#, quotInt#, raise#, readMutVar#, resizeMutableByteArray#, sizeofArray#, sizeofMutableArray#, unsafeFreezeArray#, unsafeFreezeByteArray#, writeArray#, writeIntArray#, writeMutVar#, writeWord32Array#, (*#), (+#), (>=#))
+import GHC.Exts (Array#, Char (C#), Float (F#), Int (I#), Int#, MutVar#, MutableArray#, MutableByteArray#, RealWorld, State#, copyMutableArray#, copyMutableByteArray#, freezeArray#, getSizeofMutableByteArray#, indexArray#, int32ToWord32#, intToInt32#, newArray#, newByteArray#, newMutVar#, newPinnedByteArray#, quotInt#, raise#, readMutVar#, resizeMutableByteArray#, sizeofArray#, sizeofMutableArray#, unsafeFreezeArray#, unsafeFreezeByteArray#, writeArray#, writeIntArray#, writeMutVar#, writeWord32Array#, (*#), (+#), (>=#))
 import GHC.Num ((+))
 import GHC.Show (Show, show)
 import GHC.Types (Type)
 import GHC.Word (Word32 (W32#))
-import Primitives (add, dup, eq, ifthenelse, lessthan, pop, rot31, sub, swap, times)
-import Runtime.Value (Bool# (..), Closure, Value# (..), eqValue#)
+import Runtime.Value (Bool# (..), Value# (..), decodeValue0#, encodeValue0#, eqValue#)
 import Text.Read (read)
 
 type UnboundIdentifier :: Type
@@ -45,14 +47,15 @@ newtype UnboundIdentifier = UnboundIdentifier String
 
 instance Exception UnboundIdentifier
 
-resizeConstantTableIfNeeded :: Int# -> MutableArray# RealWorld Value# -> State# RealWorld -> (# State# RealWorld, MutableArray# RealWorld Value# #)
+resizeConstantTableIfNeeded :: Int# -> MutableByteArray# RealWorld -> State# RealWorld -> (# State# RealWorld, MutableByteArray# RealWorld #)
 resizeConstantTableIfNeeded 0# constants s0 = (# s0, constants #)
 resizeConstantTableIfNeeded 1# constants s0 =
-  let !constantsSize = sizeofMutableArray# constants
+  let !(# s1, constantsSize #) = getSizeofMutableByteArray# constants s0
       -- !_ = unsafePerformIO (putStrLn $ ">> Resizing constant table from " <> show (I# constantsSize) <> " to " <> show (I# (constantsSize *# 2#))) in
-      !(# s1, arr #) = newArray# (constantsSize *# 2#) (VInteger# 0#) s0
-      !s2 = copyMutableArray# constants 0# arr 0# constantsSize s1
-   in (# s2, arr #)
+      -- !(# s1, arr #) = newArray# (constantsSize *# 2#) (VInteger# 0#) s0
+      -- !s2 = copyMutableArray# constants 0# arr 0# constantsSize s1
+      !(# s2, !arr0 #) = resizeMutableByteArray# constants (constantsSize *# 2#) s1
+   in (# s2, arr0 #)
 resizeConstantTableIfNeeded _ _ _ = undefined
 
 resizeSymbolsTableIfNeeded :: Int# -> MutableArray# RealWorld Text -> State# RealWorld -> (# State# RealWorld, MutableArray# RealWorld Text #)
@@ -99,29 +102,31 @@ compile expr bindings s0 =
         go expr bindings constants constantsPtr symbols symbolsPtr functions functionsPtr code codePtr s4
 
       !(# s6, I# constantsPtr0 #) = readMutVar# constantsPtr s5
-      !(# s7, !constants1 #) = freezeArray# constants0 0# constantsPtr0 s6
+      !(# s7, constants1 #) = newPinnedByteArray# (constantsPtr0 *# VALUE_SIZE_IN_BYTES) s6
+      !s8 = copyMutableByteArray# constants0 0# constants1 0# (constantsPtr0 *# VALUE_SIZE_IN_BYTES) s7
+      !(# s9, !constants2 #) = unsafeFreezeByteArray# constants1 s8
 
-      !(# s8, I# symbolsPtr0 #) = readMutVar# symbolsPtr s7
-      !(# s9, !symbols1 #) = freezeArray# symbols0 0# symbolsPtr0 s8
+      !(# s10, I# symbolsPtr0 #) = readMutVar# symbolsPtr s9
+      !(# s11, !symbols1 #) = freezeArray# symbols0 0# symbolsPtr0 s10
 
-      !(# s10, I# functionsPtr0 #) = readMutVar# functionsPtr s9
-      !(# s11, functions1 #) = newPinnedByteArray# (functionsPtr0 *# WORD_SIZE_IN_BYTES) s10
-      !s12 = copyMutableByteArray# functions0 0# functions1 0# (functionsPtr0 *# WORD_SIZE_IN_BYTES) s11
-      !(# s13, !functions2 #) = unsafeFreezeByteArray# functions1 s12
+      !(# s12, I# functionsPtr0 #) = readMutVar# functionsPtr s11
+      !(# s13, functions1 #) = newPinnedByteArray# (functionsPtr0 *# WORD_SIZE_IN_BYTES) s12
+      !s14 = copyMutableByteArray# functions0 0# functions1 0# (functionsPtr0 *# WORD_SIZE_IN_BYTES) s13
+      !(# s15, !functions2 #) = unsafeFreezeByteArray# functions1 s14
       -- !(# s11, functions1 #) = freezeArray# functions0 0# functionsPtr0 s10
 
-      !(# s14, I# codePtr0 #) = readMutVar# codePtr s13
+      !(# s16, I# codePtr0 #) = readMutVar# codePtr s15
       -- !s13 = shrinkMutableByteArray# code0 (codePtr0 *# 4#) s12
-      !(# s15, code1 #) = newPinnedByteArray# (codePtr0 *# 4#) s14
-      !s16 = copyMutableByteArray# code0 0# code1 0# (codePtr0 *# 4#) s15
-      !(# s17, !code2 #) = unsafeFreezeByteArray# code1 s16
+      !(# s17, code1 #) = newPinnedByteArray# (codePtr0 *# 4#) s16
+      !s18 = copyMutableByteArray# code0 0# code1 0# (codePtr0 *# 4#) s17
+      !(# s19, !code2 #) = unsafeFreezeByteArray# code1 s18
    in -- NOTE: symbolsPtr0 ==# functionsPtr0 must be 1#
 
-      (# s17, File constants1 symbols1 functions2 code2 ip #)
+      (# s19, File constants2 symbols1 functions2 code2 ip #)
   where
-    createConstantArray :: State# RealWorld -> (# State# RealWorld, (# MutableArray# RealWorld Value#, MutVar# RealWorld Int #) #)
+    createConstantArray :: State# RealWorld -> (# State# RealWorld, (# MutableByteArray# RealWorld, MutVar# RealWorld Int #) #)
     createConstantArray s0 =
-      let !(# s1, constants #) = (newArray# 10# $! VInteger# 0#) s0
+      let !(# s1, constants #) = newByteArray# (10# *# VALUE_SIZE_IN_BYTES) s0
           !(# s2, ptr #) = newMutVar# (0 :: Int) s1
        in (# s2, (# constants, ptr #) #)
 
@@ -150,7 +155,7 @@ compile expr bindings s0 =
 
     compileAdditionalBindings ::
       [(Text, Expr)] ->
-      MutableArray# RealWorld Value# ->
+      MutableByteArray# RealWorld ->
       MutVar# RealWorld Int ->
       MutableArray# RealWorld Text ->
       MutVar# RealWorld Int ->
@@ -159,7 +164,7 @@ compile expr bindings s0 =
       MutableByteArray# RealWorld ->
       MutVar# RealWorld Int ->
       State# RealWorld ->
-      (# State# RealWorld, (# MutableArray# RealWorld Value#, MutableArray# RealWorld Text, MutableByteArray# RealWorld, MutableByteArray# RealWorld #) #)
+      (# State# RealWorld, (# MutableByteArray# RealWorld, MutableArray# RealWorld Text, MutableByteArray# RealWorld, MutableByteArray# RealWorld #) #)
     compileAdditionalBindings [] constants _ symbols _ functions _ code _ s0 = (# s0, (# constants, symbols, functions, code #) #)
     compileAdditionalBindings ((name, val) : binds) constants constantsPtr symbols symbolsPtr functions functionsPtr code codePtr s0 =
       let !(# s1, !(I# codePtr0) #) = readMutVar# codePtr s0
@@ -191,7 +196,7 @@ compile expr bindings s0 =
 
 compileExpr ::
   Expr ->
-  MutableArray# RealWorld Value# ->
+  MutableByteArray# RealWorld ->
   MutVar# RealWorld Int ->
   MutableArray# RealWorld Text ->
   MutVar# RealWorld Int ->
@@ -200,7 +205,7 @@ compileExpr ::
   MutableByteArray# RealWorld ->
   MutVar# RealWorld Int ->
   State# RealWorld ->
-  (# State# RealWorld, (# Int#, MutableArray# RealWorld Value#, MutableArray# RealWorld Text, MutableByteArray# RealWorld, MutableByteArray# RealWorld #) #)
+  (# State# RealWorld, (# Int#, MutableByteArray# RealWorld, MutableArray# RealWorld Text, MutableByteArray# RealWorld, MutableByteArray# RealWorld #) #)
 compileExpr expr constants constantsPtr symbols symbolsPtr functions functionsPtr code codePtr s0 =
   let !(# s1, (# constants0, symbols0, functions0, code0, expr0 #) #) =
         precompileQuotes expr constants constantsPtr symbols symbolsPtr functions functionsPtr code codePtr s0
@@ -211,7 +216,7 @@ compileExpr expr constants constantsPtr symbols symbolsPtr functions functionsPt
 
 precompileQuotes ::
   Expr ->
-  MutableArray# RealWorld Value# ->
+  MutableByteArray# RealWorld ->
   MutVar# RealWorld Int ->
   MutableArray# RealWorld Text ->
   MutVar# RealWorld Int ->
@@ -220,13 +225,13 @@ precompileQuotes ::
   MutableByteArray# RealWorld ->
   MutVar# RealWorld Int ->
   State# RealWorld ->
-  (# State# RealWorld, (# MutableArray# RealWorld Value#, MutableArray# RealWorld Text, MutableByteArray# RealWorld, MutableByteArray# RealWorld, Expr #) #)
+  (# State# RealWorld, (# MutableByteArray# RealWorld, MutableArray# RealWorld Text, MutableByteArray# RealWorld, MutableByteArray# RealWorld, Expr #) #)
 precompileQuotes = go []
   where
     go ::
       Expr ->
       Expr ->
-      MutableArray# RealWorld Value# ->
+      MutableByteArray# RealWorld ->
       MutVar# RealWorld Int ->
       MutableArray# RealWorld Text ->
       MutVar# RealWorld Int ->
@@ -235,7 +240,7 @@ precompileQuotes = go []
       MutableByteArray# RealWorld ->
       MutVar# RealWorld Int ->
       State# RealWorld ->
-      (# State# RealWorld, (# MutableArray# RealWorld Value#, MutableArray# RealWorld Text, MutableByteArray# RealWorld, MutableByteArray# RealWorld, Expr #) #)
+      (# State# RealWorld, (# MutableByteArray# RealWorld, MutableArray# RealWorld Text, MutableByteArray# RealWorld, MutableByteArray# RealWorld, Expr #) #)
     go acc [] constants _ symbols _ functions _ code _ s0 = (# s0, (# constants, symbols, functions, code, List.reverse acc #) #)
     go acc (atom : expr) constants constantsPtr symbols symbolsPtr functions functionsPtr code codePtr s0 = case atom of
       AQuote expr0 ->
@@ -254,7 +259,7 @@ precompileQuotes = go []
 
 compileAtoms ::
   Expr ->
-  MutableArray# RealWorld Value# ->
+  MutableByteArray# RealWorld ->
   MutVar# RealWorld Int ->
   MutableArray# RealWorld Text ->
   MutVar# RealWorld Int ->
@@ -263,7 +268,7 @@ compileAtoms ::
   MutableByteArray# RealWorld ->
   MutVar# RealWorld Int ->
   State# RealWorld ->
-  (# State# RealWorld, (# MutableArray# RealWorld Value#, MutableArray# RealWorld Text, MutableByteArray# RealWorld, MutableByteArray# RealWorld #) #)
+  (# State# RealWorld, (# MutableByteArray# RealWorld, MutableArray# RealWorld Text, MutableByteArray# RealWorld, MutableByteArray# RealWorld #) #)
 compileAtoms [] constants _ symbols _ functions _ code _ s0 = (# s0, (# constants, symbols, functions, code #) #)
 compileAtoms (atom : expr) constants constantsPtr symbols symbolsPtr functions functionsPtr code codePtr s0 =
   let !(# s1, (# constants0, symbols0, functions0, code0 #) #) = compileAtom atom constants symbols functions code s0
@@ -271,23 +276,23 @@ compileAtoms (atom : expr) constants constantsPtr symbols symbolsPtr functions f
   where
     compileAtom ::
       Atom ->
-      MutableArray# RealWorld Value# ->
+      MutableByteArray# RealWorld ->
       MutableArray# RealWorld Text ->
       MutableByteArray# RealWorld ->
       MutableByteArray# RealWorld ->
       State# RealWorld ->
-      (# State# RealWorld, (# MutableArray# RealWorld Value#, MutableArray# RealWorld Text, MutableByteArray# RealWorld, MutableByteArray# RealWorld #) #)
+      (# State# RealWorld, (# MutableByteArray# RealWorld, MutableArray# RealWorld Text, MutableByteArray# RealWorld, MutableByteArray# RealWorld #) #)
     compileAtom (AInteger (I# i)) constants symbols functions code s0 =
-      let !(# s1, (# constants0, code0 #) #) = (insertConstant $! VInteger# i) constants constantsPtr code codePtr s0
+      let !(# s1, (# constants0, code0 #) #) = insertConstant (VInteger# i) constants constantsPtr code codePtr s0
        in (# s1, (# constants0, symbols, functions, code0 #) #)
     compileAtom (ACharacter (C# c)) constants symbols functions code s0 =
-      let !(# s1, (# constants0, code0 #) #) = (insertConstant $! VCharacter# c) constants constantsPtr code codePtr s0
+      let !(# s1, (# constants0, code0 #) #) = insertConstant (VCharacter# c) constants constantsPtr code codePtr s0
        in (# s1, (# constants0, symbols, functions, code0 #) #)
     compileAtom (ABoolean b) constants symbols functions code s0 =
-      let !(# s1, (# constants0, code0 #) #) = (insertConstant $! VBoolean# if b then True# else False#) constants constantsPtr code codePtr s0
+      let !(# s1, (# constants0, code0 #) #) = insertConstant (VBoolean# if b then True# else False#) constants constantsPtr code codePtr s0
        in (# s1, (# constants0, symbols, functions, code0 #) #)
-    compileAtom (AFloat (D# d)) constants symbols functions code s0 =
-      let !(# s1, (# constants0, code0 #) #) = (insertConstant $! VDouble# d) constants constantsPtr code codePtr s0
+    compileAtom (AFloat (F# d)) constants symbols functions code s0 =
+      let !(# s1, (# constants0, code0 #) #) = insertConstant (VDouble# d) constants constantsPtr code codePtr s0
        in (# s1, (# constants0, symbols, functions, code0 #) #)
     compileAtom (AIdentifier "unquote") constants symbols functions code s0 =
       let !(# s1, I# codePtr0 #) = readMutVar# codePtr s0
@@ -296,40 +301,40 @@ compileAtoms (atom : expr) constants constantsPtr symbols symbolsPtr functions f
           !(# s4, code1 #) = pushOpcodes [BYTECODE_UNQUOTE] codePtr0 code0 codePtr s3
        in (# s4, (# constants, symbols, functions, code1 #) #)
     compileAtom (AIdentifier "pop") constants symbols functions code s0 =
-      let !(# s1, (# constants0, code0 #) #) = insertBuiltin pop 0# constants constantsPtr code codePtr s0
-       in (# s1, (# constants0, symbols, functions, code0 #) #)
+      let !(# s1, code0 #) = insertBuiltin PRIM_POP_IDX# code codePtr s0
+       in (# s1, (# constants, symbols, functions, code0 #) #)
     compileAtom (AIdentifier "dup") constants symbols functions code s0 =
-      let !(# s1, (# constants0, code0 #) #) = insertBuiltin dup 1# constants constantsPtr code codePtr s0
-       in (# s1, (# constants0, symbols, functions, code0 #) #)
+      let !(# s1, code0 #) = insertBuiltin PRIM_DUP_IDX# code codePtr s0
+       in (# s1, (# constants, symbols, functions, code0 #) #)
     compileAtom (AIdentifier "swap") constants symbols functions code s0 =
-      let !(# s1, (# constants0, code0 #) #) = insertBuiltin swap 2# constants constantsPtr code codePtr s0
-       in (# s1, (# constants0, symbols, functions, code0 #) #)
+      let !(# s1, code0 #) = insertBuiltin PRIM_SWAP_IDX# code codePtr s0
+       in (# s1, (# constants, symbols, functions, code0 #) #)
     compileAtom (AIdentifier "if") constants symbols functions code s0 =
-      let !(# s1, (# constants0, code0 #) #) = insertBuiltin ifthenelse 3# constants constantsPtr code codePtr s0
-       in (# s1, (# constants0, symbols, functions, code0 #) #)
+      let !(# s1, code0 #) = insertBuiltin PRIM_IF_IDX# code codePtr s0
+       in (# s1, (# constants, symbols, functions, code0 #) #)
     compileAtom (AIdentifier "rot31") constants symbols functions code s0 =
-      let !(# s1, (# constants0, code0 #) #) = insertBuiltin rot31 4# constants constantsPtr code codePtr s0
-       in (# s1, (# constants0, symbols, functions, code0 #) #)
+      let !(# s1, code0 #) = insertBuiltin PRIM_ROT31_IDX# code codePtr s0
+       in (# s1, (# constants, symbols, functions, code0 #) #)
     compileAtom (AIdentifier "+") constants symbols functions code s0 =
-      let !(# s1, (# constants0, code0 #) #) = insertBuiltin add 5# constants constantsPtr code codePtr s0
-       in (# s1, (# constants0, symbols, functions, code0 #) #)
+      let !(# s1, code0 #) = insertBuiltin PRIM_ADD_IDX# code codePtr s0
+       in (# s1, (# constants, symbols, functions, code0 #) #)
     compileAtom (AIdentifier "-") constants symbols functions code s0 =
-      let !(# s1, (# constants0, code0 #) #) = insertBuiltin sub 6# constants constantsPtr code codePtr s0
-       in (# s1, (# constants0, symbols, functions, code0 #) #)
+      let !(# s1, code0 #) = insertBuiltin PRIM_SUB_IDX# code codePtr s0
+       in (# s1, (# constants, symbols, functions, code0 #) #)
     compileAtom (AIdentifier "*") constants symbols functions code s0 =
-      let !(# s1, (# constants0, code0 #) #) = insertBuiltin times 7# constants constantsPtr code codePtr s0
-       in (# s1, (# constants0, symbols, functions, code0 #) #)
+      let !(# s1, code0 #) = insertBuiltin PRIM_TIMES_IDX# code codePtr s0
+       in (# s1, (# constants, symbols, functions, code0 #) #)
     compileAtom (AIdentifier "=") constants symbols functions code s0 =
-      let !(# s1, (# constants0, code0 #) #) = insertBuiltin eq 8# constants constantsPtr code codePtr s0
-       in (# s1, (# constants0, symbols, functions, code0 #) #)
+      let !(# s1, code0 #) = insertBuiltin PRIM_EQ_IDX# code codePtr s0
+       in (# s1, (# constants, symbols, functions, code0 #) #)
     compileAtom (AIdentifier "<") constants symbols functions code s0 =
-      let !(# s1, (# constants0, code0 #) #) = insertBuiltin lessthan 9# constants constantsPtr code codePtr s0
-       in (# s1, (# constants0, symbols, functions, code0 #) #)
+      let !(# s1, code0 #) = insertBuiltin PRIM_LESSTHAN_IDX# code codePtr s0
+       in (# s1, (# constants, symbols, functions, code0 #) #)
     compileAtom (AIdentifier name) constants symbols functions code s0 =
       case (# Text.head name, Text.tail name #) of
         (# '$', !offset #) ->
           let !(I# off) = read (Text.unpack offset)
-              !(# s1, (# constants0, code0 #) #) = (insertConstant $! VQuote# off) constants constantsPtr code codePtr s0
+              !(# s1, (# constants0, code0 #) #) = insertConstant (VQuote# off) constants constantsPtr code codePtr s0
            in (# s1, (# constants0, symbols, functions, code0 #) #)
         _ ->
           let !(# s1, index #) = findIndexFromReducerName symbols name s0
@@ -353,63 +358,54 @@ pushOpcodes opcodes offset code codePtr s0 =
 
 insertConstant ::
   Value# ->
-  MutableArray# RealWorld Value# ->
+  MutableByteArray# RealWorld ->
   MutVar# RealWorld Int ->
   MutableByteArray# RealWorld ->
   MutVar# RealWorld Int ->
   State# RealWorld ->
-  (# State# RealWorld, (# MutableArray# RealWorld Value#, MutableByteArray# RealWorld #) #)
+  (# State# RealWorld, (# MutableByteArray# RealWorld, MutableByteArray# RealWorld #) #)
 insertConstant cst table cstPtr code codePtr s0 =
   let !(# s1, !(I# cstPtr0) #) = readMutVar# cstPtr s0
       !(# s2, !(I# codePtr0) #) = readMutVar# codePtr s1
       !(# s3, (# index, table0 #) #) = insertConstantInTableOnlyWhenNotFound cst table cstPtr cstPtr0 s2
       !(# s4, codeSize #) = getSizeofMutableByteArray# code s3
       !(# s5, code0 #) = resizeCodeTableIfNeeded ((codePtr0 +# 1#) *# 4# >=# codeSize) code s4
-      !s6 = writeArray# table0 cstPtr0 cst s5
+      !s6 = encodeValue0# cst table0 cstPtr0 s5
       !(# s7, code1 #) = pushOpcodes [BYTECODE_PUSH, W32# (int32ToWord32# (intToInt32# index))] codePtr0 code0 codePtr s6
    in (# s7, (# table0, code1 #) #)
 
 insertBuiltin ::
-  Closure ->
   Int# ->
-  MutableArray# RealWorld Value# ->
-  MutVar# RealWorld Int ->
   MutableByteArray# RealWorld ->
   MutVar# RealWorld Int ->
   State# RealWorld ->
-  (# State# RealWorld, (# MutableArray# RealWorld Value#, MutableByteArray# RealWorld #) #)
-insertBuiltin f id constants constantsPtr code codePtr s0 =
-  let !(# s1, !(I# cstPtr0) #) = readMutVar# constantsPtr s0
-      !(# s2, !(I# codePtr0) #) = readMutVar# codePtr s1
-      !cst = VPrimitive# f id
+  (# State# RealWorld, MutableByteArray# RealWorld #)
+insertBuiltin id code codePtr s0 =
+  let !(# s1, !(I# codePtr0) #) = readMutVar# codePtr s0
 
-      !(# s3, (# index, constants0 #) #) = insertConstantInTableOnlyWhenNotFound cst constants constantsPtr cstPtr0 s2
-
-      !(# s4, codeSize #) = getSizeofMutableByteArray# code s3
-      !(# s5, code0 #) = resizeCodeTableIfNeeded ((codePtr0 +# 1#) *# 4# >=# codeSize) code s4
-      !s6 = writeArray# constants0 cstPtr0 cst s5
-      !(# s7, code1 #) = pushOpcodes [BYTECODE_PRIM, W32# (int32ToWord32# (intToInt32# index))] codePtr0 code0 codePtr s6
-   in (# s7, (# constants0, code1 #) #)
+      !(# s2, codeSize #) = getSizeofMutableByteArray# code s1
+      !(# s3, code0 #) = resizeCodeTableIfNeeded ((codePtr0 +# 1#) *# 4# >=# codeSize) code s2
+      !(# s4, code1 #) = pushOpcodes [BYTECODE_PRIM, W32# (int32ToWord32# (intToInt32# id))] codePtr0 code0 codePtr s3
+   in (# s4, code1 #)
 
 insertConstantInTableOnlyWhenNotFound ::
   Value# ->
-  MutableArray# RealWorld Value# ->
+  MutableByteArray# RealWorld ->
   MutVar# RealWorld Int ->
   Int# ->
   State# RealWorld ->
-  (# State# RealWorld, (# Int#, MutableArray# RealWorld Value# #) #)
+  (# State# RealWorld, (# Int#, MutableByteArray# RealWorld #) #)
 insertConstantInTableOnlyWhenNotFound cst constants cstPtr cstPtr0 s0 = go constants 0# cstPtr0 s0
   where
-    go :: MutableArray# RealWorld Value# -> Int# -> Int# -> State# RealWorld -> (# State# RealWorld, (# Int#, MutableArray# RealWorld Value# #) #)
+    go :: MutableByteArray# RealWorld -> Int# -> Int# -> State# RealWorld -> (# State# RealWorld, (# Int#, MutableByteArray# RealWorld #) #)
     go table x end s0 = case x >=# end of
       1# ->
-        let !cstSize = sizeofMutableArray# table
-            !(# s1, table0 #) = resizeConstantTableIfNeeded (end >=# cstSize) table s0
-            !s2 = writeMutVar# cstPtr (I# (end +# 1#)) s1
-         in (# s2, (# end, table0 #) #)
+        let !(# s1, cstSize #) = getSizeofMutableByteArray# table s0
+            !(# s2, table0 #) = resizeConstantTableIfNeeded (end *# VALUE_SIZE_IN_BYTES >=# cstSize) table s1
+            !s3 = writeMutVar# cstPtr (I# (end +# 1#)) s2
+         in (# s3, (# end, table0 #) #)
       0# ->
-        let !(# s1, table0 #) = unsafeFreezeArray# table s0
-            (# !value #) = indexArray# table0 x
+        let !(# s1, value #) = decodeValue0# table x s0
          in case eqValue# cst value of
               0# -> go table (x +# 1#) end s1
               1# -> (# s1, (# x, table #) #)

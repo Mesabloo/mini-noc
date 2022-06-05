@@ -1,4 +1,4 @@
-SOURCES = Variables.hs Runtime/Internal.hs Runtime/Stack.hs Runtime/Value.hs Expr.hs Bytecode.hs Primitives.hs Compiler.hs VM.hs
+SOURCES = Variables.hs Runtime/Internal.hs Runtime/Stack.hs Runtime/Value.hs Expr.hs Examples.hs Bytecode.hs Primitives.hs Compiler.hs VM.hs
 EXECUTABLE := VM
 
 GHC_FLAGS = -Weverything -Wno-missing-import-lists -Wno-unsafe -Wno-name-shadowing -Wno-missing-export-lists

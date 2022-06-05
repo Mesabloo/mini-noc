@@ -1,5 +1,5 @@
 { pkgs ? import ./nixpkgs.nix
-, compiler ? "HEAD"
+, compiler ? "922"
 }:
 
 # let

@@ -40,9 +40,12 @@ module Runtime.Internal
     -- * Values
     Bool# (.., False#, True#),
     showBool#,
-    Value# (.., VQuote#, VDouble#, VInteger#, VCharacter#, VBoolean#, VPrimitive#),
+    Value# (.., VQuote#, VDouble#, VInteger#, VCharacter#, VBoolean#),
     showValue#,
     eqValue#,
+    decodeValue0#,
+    decodeValue1#,
+    encodeValue0#,
     Closure,
 
     -- * Exceptions
@@ -54,6 +57,8 @@ where
 
 #define WORD_SIZE_IN_BYTES (WORD_SIZE_IN_BITS# `quotInt#` 8# )
 
+#define VALUE_SIZE_IN_BYTES (1# +# 4# )
+
 #define INITIAL_CALLSTACK_SIZE 20
 #define INITIAL_DATASTACK_SIZE 100
 #define STACK_SAFE_OPERATIONS 0
@@ -61,14 +66,13 @@ where
 #if STACK_SAFE_OPERATIONS == 1
 import Control.Exception (toException)
 #endif
-import Data.Eq ((==))
 #if DEBUG == 1
 import Data.Function (($))
 #endif
 import Data.Semigroup ((<>))
 import Data.String (String)
 import GHC.Exception (Exception)
-import GHC.Exts (Array#, Char (C#), Char#, Double (D#), Double#, Int (I#), Int#, MutableArray#, MutableByteArray#, RealWorld, State#, copyMutableArray#, eqChar#, getSizeofMutableByteArray#, newArray#, newByteArray#, quotInt#, readArray#, readIntArray#, resizeMutableByteArray#, sizeofMutableArray#, unsafeFreezeArray#, writeArray#, writeIntArray#, (*#), (+#), (==#), (==##), (>=#))
+import GHC.Exts (Char (C#), Char#, Int (I#), Int#, MutableByteArray#, RealWorld, State#, eqChar#, getSizeofMutableByteArray#, newByteArray#, quotInt#, readIntArray#, resizeMutableByteArray#, writeIntArray#, (*#), (+#), (==#), (>=#), ByteArray#, Float#, Float (F#), eqFloat#, readWord8Array#, word8ToWord#, unsafeCoerce#, copyMutableByteArray#, unsafeFreezeByteArray#, Word32#, readWord8ArrayAsWord32#, writeWord8Array#, writeWord8ArrayAsWord32#, wordToWord8#, indexWord8Array#, indexWord8ArrayAsWord32#, Word8#, word2Int#, word32ToWord#)
 #if STACK_SAFE_OPERATIONS == 1
 import GHC.Exts (raise#)
 #endif
@@ -80,8 +84,9 @@ import GHC.Show (Show, show)
 #if DEBUG == 1
 import System.IO (putStrLn, putStr)
 #endif
-import GHC.Types (RuntimeRep (IntRep, TupleRep), TYPE, UnliftedRep, Type)
+import GHC.Types (RuntimeRep (..), TYPE, UnliftedRep, Type)
 import Variables (MutableIntVar#, getAndDecrementIntVar#, incrementAndGetIntVar#, newIntVar#, readIntVar#)
+import GHC.Err (undefined)
 
 -- | Tried popping from an empty stack.
 type StackUnderflow :: Type
@@ -190,15 +195,15 @@ debugCallStack# (CallStack (# arr, ptr #)) s0 =
 
 -----------------------------------------------------------------
 
--- | Holds 'Value#'s internally.
+-- | Holds 'Value#'s internally (these are a 'Tag#' + some value-specific encoding).
 type DataStack# :: Type -> TYPE ('TupleRep '[UnliftedRep, UnliftedRep])
-newtype DataStack# s = DataStack (# MutableArray# s Value#, MutableIntVar# s #)
+newtype DataStack# s = DataStack (# MutableByteArray# s, MutableIntVar# s #)
 
--- | Allocate a new empty data stack (holding 'Value#'s) with capacity INITIAL_DATASTACK_SIZE.
+-- | Allocate a new empty data stack (holding 'Value#'s) with bytes capacity INITIAL_DATASTACK_SIZE.
 newDataStack# :: State# s -> (# State# s, DataStack# s #)
 newDataStack# s0 =
   let !(# s1, ptr #) = newIntVar# -1# s0
-      !(# s2, arr #) = newArray# INITIAL_CALLSTACK_SIZE# (VInteger# 0#) s1
+      !(# s2, arr #) = newByteArray# (INITIAL_CALLSTACK_SIZE# *# (1# +# 8#)) s1
    in (# s2, DataStack (# arr, ptr #) #)
 {-# INLINE newDataStack# #-}
 
@@ -212,7 +217,7 @@ pushDataStack# :: DataStack# s -> Value# -> State# s -> (# State# s, DataStack# 
 pushDataStack# (DataStack (# arr, ptr #)) val s0 =
   let !(# s1, arr0 #) = resizeDataStack# arr ptr s0
       !(# s2, ptrPlusOne #) = incrementAndGetIntVar# ptr s1
-      !s3 = writeArray# arr0 ptrPlusOne val s2
+      !s3 = encodeValue0# val arr0 ptrPlusOne s2
    in (# s3, DataStack (# arr0, ptr #) #)
 {-# INLINEABLE pushDataStack# #-}
 
@@ -229,7 +234,7 @@ popDataStack# (DataStack (# arr, ptr #)) s0 =
            in raise# (toException StackUnderflow)
          _ ->
 #endif
-           readArray# arr ptrValue s1
+           decodeValue0# arr ptrValue s1
 {-# INLINEABLE popDataStack# #-}
 
 -- | Get the top of the data stack without actually removing it.
@@ -245,7 +250,7 @@ peekDataStack# (DataStack (# arr, ptr #)) s0 =
             in raise# (toException StackUnderflow)
         _ ->
 #endif
-          readArray# arr ptrValue s1
+          decodeValue0# arr ptrValue s1
 {-# INLINEABLE peekDataStack# #-}
 
 {- ORMOLU_ENABLE -}
@@ -256,26 +261,36 @@ peekDataStack# (DataStack (# arr, ptr #)) s0 =
 --
 --   /Note:/ The returned array will not be as big as the capacity of the data stack, rather it will contain
 --   only as much 'Value#'s which have been added onto it.
-freezeDataStack# :: DataStack# s -> State# s -> (# State# s, Array# Value# #)
+freezeDataStack# :: DataStack# s -> State# s -> (# State# s, ByteArray# #)
 freezeDataStack# (DataStack (# arr, ptr #)) s0 =
   let !(# s1, ptrValue #) = readIntVar# ptr s0
-      !(# s2, arr0 #) = newArray# (ptrValue +# 1#) (VInteger# 0#) s1
-      !s3 = copyMutableArray# arr 0# arr0 0# (sizeofMutableArray# arr0) s2
-      !(# s4, arr1 #) = unsafeFreezeArray# arr0 s3
+      !size = (ptrValue +# 1#) *# VALUE_SIZE_IN_BYTES
+      !(# s2, arr0 #) = newByteArray# size s1
+      !s3 = copyMutableByteArray# arr 0# arr0 0# size s2
+      !(# s4, arr1 #) = unsafeFreezeByteArray# arr0 s3
    in (# s4, arr1 #)
 {-# INLINEABLE freezeDataStack# #-}
 
 -- | TODO: documentation
-resizeDataStack# :: MutableArray# s Value# -> MutableIntVar# s -> State# s -> (# State# s, MutableArray# s Value# #)
+resizeDataStack# :: MutableByteArray# s -> MutableIntVar# s -> State# s -> (# State# s, MutableByteArray# s #)
 resizeDataStack# arr ptr s0 =
   let !(# s1, ptrValue #) = readIntVar# ptr s0
-      !oldSize = sizeofMutableArray# arr
-   in case ptrValue +# 1# >=# oldSize of
+      !(# s2, oldSize #) = getSizeofMutableByteArray# arr s1
+#if DEBUG
+      !_ = unsafePerformIO (putStrLn $ "Datastack: ptr=" <> show (I# ptrValue) <> ", off=" <> show (I# (ptrValue *# VALUE_SIZE_IN_BYTES)) <> "B, size=" <> show (I# oldSize) <> "B")
+#endif
+   in case (ptrValue +# 1#) *# VALUE_SIZE_IN_BYTES >=# oldSize of
         1# ->
-          let !(# s2, arr0 #) = newArray# (oldSize *# 2#) (VInteger# 0#) s1
-              !s3 = copyMutableArray# arr 0# arr0 0# oldSize s2
+#if DEBUG
+          let !_ = unsafePerformIO (putStrLn $ "Datastack: expanding") in
+#endif
+          let !(# s3, !arr0 #) = resizeMutableByteArray# arr (oldSize *# 2#) s2
            in (# s3, arr0 #)
-        _ -> (# s1, arr #)
+        _ ->
+#if DEBUG
+          let !_ = unsafePerformIO (putStrLn $ "Datastack: not expanding") in
+#endif
+          (# s2, arr #)
 {-# INLINEABLE resizeDataStack# #-}
 
 #if DEBUG == 1
@@ -323,54 +338,94 @@ showBool# True# = "true"
 showBool# False# = "false"
 {-# INLINE showBool# #-}
 
--- | The kind of runtime values as a unboxed sum.
---
---   (For reasons, this is a @data@ as it cannot be used inside 'Vector's otherwise)
-type Value# :: Type
-data Value#
-  = Value
-      (# Int#| Double#| Int#| Char#| Bool#|  (# Closure, Int# #) #)
+-- | The kind of runtime values as an unboxed sum.
+type Value# :: TYPE ('SumRep '[ 'IntRep, 'FloatRep, 'IntRep, 'WordRep, 'IntRep ])
+newtype Value# = Value (# Int#| Float#| Int#| Char#| Bool# #)
 
 pattern VQuote# :: Int# -> Value#
-pattern VQuote# idx = Value (# idx | | | | | #)
+pattern VQuote# idx = Value (# idx | | | | #)
 
-pattern VDouble# :: Double# -> Value#
-pattern VDouble# d = Value (# | d | | | | #)
+pattern VDouble# :: Float# -> Value#
+pattern VDouble# d = Value (# | d | | | #)
 
 pattern VInteger# :: Int# -> Value#
-pattern VInteger# i = Value (# | | i | | | #)
+pattern VInteger# i = Value (# | | i | | #)
 
 pattern VCharacter# :: Char# -> Value#
-pattern VCharacter# c = Value (# | | | c | | #)
+pattern VCharacter# c = Value (# | | | c | #)
 
 pattern VBoolean# :: Bool# -> Value#
-pattern VBoolean# b = Value (# | | | | b | #)
+pattern VBoolean# b = Value (# | | | | b #)
 
-pattern VPrimitive# :: Closure -> Int# -> Value#
-pattern VPrimitive# f id = Value (# | | | | | (# f, id #) #)
+{-# COMPLETE VQuote#, VDouble#, VInteger#, VCharacter#, VBoolean# #-}
 
 -- | Returns a 'String' representation of a 'Value#'.
 showValue# :: Value# -> String
 showValue# (VQuote# off) = "#" <> show (I# off)
-showValue# (VDouble# d) = show (D# d)
+showValue# (VDouble# d) = show (F# d)
 showValue# (VInteger# i) = show (I# i)
 showValue# (VCharacter# c) = show (C# c)
 showValue# (VBoolean# b) = showBool# b
-showValue# (VPrimitive# _ id) = "prim@" <> show (I# id)
 showValue# _ = "???"
 {-# INLINE showValue# #-}
 
 -- | Tests the equality of 'Value#'s and returns '0#' if they differ, or '1#' if they are equal.
 eqValue# :: Value# -> Value# -> Int#
-eqValue# (VDouble# d1) (VDouble# d2) = d1 ==## d2
+eqValue# (VDouble# d1) (VDouble# d2) = d1 `eqFloat#` d2
 eqValue# (VInteger# i1) (VInteger# i2) = i1 ==# i2
 eqValue# (VCharacter# c1) (VCharacter# c2) = eqChar# c1 c2
 eqValue# (VBoolean# (Bool# b1)) (VBoolean# (Bool# b2)) = b1 ==# b2
 eqValue# (VQuote# o1) (VQuote# o2) = o1 ==# o2
-eqValue# (VPrimitive# _ id1) (VPrimitive# _ id2) = id1 ==# id2
 eqValue# _ _ = 0#
 {-# INLINE eqValue# #-}
 
+decodeValue0# :: MutableByteArray# s -> Int# -> State# s -> (# State# s, Value# #)
+decodeValue0# arr ptr s0 =
+  let baseOffset = ptr *# VALUE_SIZE_IN_BYTES
+
+      !(# s1, word8Tag #) = readWord8Array# arr baseOffset s0
+      !(# s2, valueAsWord32 #) = readWord8ArrayAsWord32# arr (baseOffset +# 1#) s1
+  in case word8ToWord# word8Tag of
+    0## -> (# s2, VQuote# (unsafeCoerce# valueAsWord32) #)
+    1## -> (# s2, VDouble# (unsafeCoerce# valueAsWord32) #)
+    2## -> (# s2, VInteger# (unsafeCoerce# valueAsWord32) #)
+    3## -> (# s2, VCharacter# (unsafeCoerce# valueAsWord32) #)
+    4## -> (# s2, VBoolean# (unsafeCoerce# valueAsWord32) #)
+{-# INLINEABLE decodeValue0# #-}
+
+decodeValue1# :: ByteArray# -> Int# -> State# s -> (# State# s, Value# #)
+decodeValue1# arr ptr s0 =
+  let baseOffset = ptr *# VALUE_SIZE_IN_BYTES
+
+      word8Tag = indexWord8Array# arr baseOffset
+      valueAsWord32 = indexWord8ArrayAsWord32# arr (baseOffset +# 1#)
+  in case word8ToWord# word8Tag of
+    0## -> (# s0, VQuote# (word2Int# (word32ToWord# valueAsWord32)) #)
+    1## -> (# s0, VDouble# (unsafeCoerce# valueAsWord32) #)
+    2## -> (# s0, VInteger# (word2Int# (word32ToWord# valueAsWord32)) #)
+    3## -> (# s0, VCharacter# (unsafeCoerce# valueAsWord32) #)
+    4## -> (# s0, VBoolean# (Bool# (word2Int# (word32ToWord# valueAsWord32))) #)
+{-# INLINE decodeValue1# #-}
+
+encodeValue0# :: Value# -> MutableByteArray# s -> Int# -> State# s -> State# s
+encodeValue0# val arr ptr s0 =
+  let !(# tag, encoded #) = encode#
+
+      baseOffset = ptr *# VALUE_SIZE_IN_BYTES
+
+      s1 = writeWord8Array# arr baseOffset tag s0
+   in writeWord8ArrayAsWord32# arr (baseOffset +# 1#) encoded s1
+  where
+    encode# :: (# Word8#, Word32# #)
+    encode# = case val of
+      VQuote# off -> (# wordToWord8# 0##, unsafeCoerce# off #)
+      VDouble# f -> (# wordToWord8# 1##, unsafeCoerce# f #)
+      VInteger# i -> (# wordToWord8# 2##, unsafeCoerce# i #)
+      VCharacter# c -> (# wordToWord8# 3##, unsafeCoerce# c #)
+      VBoolean# b -> (# wordToWord8# 4##, unsafeCoerce# b #)
+    {-# INLINE encode# #-}
+{-# INLINE encodeValue0# #-}
+    
 -- | A closure (used to implement primitive operations in the VM) is a function which takes the current data stack
 --   and operates on it.
 type Closure :: Type

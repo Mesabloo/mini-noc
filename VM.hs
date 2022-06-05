@@ -24,6 +24,8 @@
 
 #include "./Bytecode.h"
 
+#define VALUE_SIZE_IN_BYTES (1# +# 4# )
+
 import Bytecode (BytecodeFile (File), CodeTable#, ConstantTable#, FunctionTable#, SymbolTable#, printBytecodeFile)
 import Compiler (compile)
 import Control.Exception (SomeException, fromException, toException)
@@ -33,18 +35,19 @@ import Data.Semigroup ((<>))
 import Data.String (String)
 import Data.Text (Text)
 import Expr (Atom (..), Expr)
-import GHC.Exts (Array#, Double (..), Double#, Int (..), Int#, RealWorld, State#, TYPE, catch#, indexArray#, indexIntArray#, indexWord32Array#, int32ToInt#, quotInt#, raise#, sizeofArray#, sizeofByteArray#, word32ToInt32#, word32ToWord#, (*##), (+#), (-#), (<##), (>#), (>=#))
+import GHC.Exts (ByteArray#, Double (..), Double#, Int#, RealWorld, State#, TYPE, catch#, indexIntArray#, indexWord32Array#, int32ToInt#, quotInt#, raise#, sizeofByteArray#, word2Int#, word32ToInt32#, word32ToWord#, (*##), (+#), (-#), (<##), (>#), (>=#))
 import GHC.IO (IO (..), unIO, unsafePerformIO)
 import GHC.Types (RuntimeRep (TupleRep), Type, UnliftedRep)
 #if DEBUG == 1
 import GHC.Word (Word32 (W32#))
 #endif
-import Primitives (TypeError (TypeError))
+import Primitives (TypeError (TypeError), prim)
 import Runtime.Stack (CallStack#, DataStack#, StackUnderflow, freezeDataStack#, newCallStack#, newDataStack#, popCallStack#, popDataStack#, pushCallStack#, pushDataStack#)
 #if DEBUG == 1
 import Runtime.Stack (debugCallStack#)
 #endif
-import Runtime.Value (Value# (VPrimitive#, VQuote#), showValue#)
+import Examples
+import Runtime.Value (Value# (VQuote#), decodeValue1#, showValue#)
 import System.CPUTime (getCPUTime)
 import System.IO (print, putStr, putStrLn)
 import Prelude (Integer, Show (..), fromIntegral, undefined, ($), ($!), (*), (-))
@@ -60,62 +63,6 @@ data Context
       SymbolTable#
       FunctionTable#
       CodeTable#
-
-------------------------------------------------------------------
-------------- SOME EXAMPLES BECAUSE WHY NOT ----------------------
-------------------------------------------------------------------
-
-example1 :: Expr
-example1 = [AIdentifier "pop"]
-
-example2 :: Expr
-example2 = [AInteger 5, AInteger 6, AIdentifier "+"]
-
-example3 :: Expr
-example3 = example2 <> example2 <> [AIdentifier "+"]
-
--- | Computation time:
---
---   [Original interpreter] ~6-7us
---   [Optimized VM] ~2.35us
-example4 :: Expr
-example4 = example3 <> example3 <> [AIdentifier "pop", AIdentifier "dup", AIdentifier "+"]
-
--- | Computation time:
---
---   [Original interpreter] ~150ms
---   [Optimized VM] ~30ms
-example5 :: Expr
-example5 = [AInteger 3, AInteger 6, AIdentifier "ack"]
-
--- | Computation time:
---
---   [Original interpreter] ~26us
---   [Optimized VM] ~5.2µs
-example6 :: Expr
-example6 = [AInteger 15, AIdentifier "fact"]
-
-example7 :: Expr
-example7 = [AInteger 15, AInteger 6, AInteger 25, AInteger 15]
-
-example8 :: Expr
-example8 = [AQuote [AInteger 1], AInteger 2]
-
-example9 :: Expr
-example9 = example8 <> [AIdentifier "pop", AIdentifier "unquote"]
-
-example10 :: Expr
-example10 = [AQuote [AQuote [AInteger 10], AIdentifier "unquote"], AIdentifier "unquote"]
-
-example11 :: Expr
-example11 = [AQuote [AInteger 10, AQuote [AInteger 12], AIdentifier "unquote"], AIdentifier "unquote"]
-
--- | Computation time:
---
---   [Original interpreter] ???
---   [Optimized VM] ~117ms
-example12 :: Expr
-example12 = [AInteger 28, AIdentifier "fib"]
 
 ------------------------------------------------------------------
 
@@ -192,14 +139,14 @@ main' s0 =
       let !(# s1, _ #) = unIO (putStr "\nresult: ") s0
 
           !(# s2, !arr0 #) = freezeDataStack# dataStack0 s1
-          !(# s3, !_ #) = printArrayBounds 0# (sizeofArray# arr0 -# 1#) arr0 s2
+          !(# s3, !_ #) = printArrayBounds 0# ((sizeofByteArray# arr0 -# 1#) `quotInt#` VALUE_SIZE_IN_BYTES) arr0 s2
           !(# s4, _ #) = unIO (putStrLn $ "time taken: " <> showTime time) s3
        in (# s4, (# #) #)
     {-# INLINE printResult #-}
 {-# INLINE main' #-}
 
 -- | Print all the elements of the given array within the specified bounds.
-printArrayBounds :: Int# -> Int# -> Array# Value# -> State# RealWorld -> (# State# RealWorld, () #)
+printArrayBounds :: Int# -> Int# -> ByteArray# -> State# RealWorld -> (# State# RealWorld, () #)
 printArrayBounds low high arr s0 = go low s0
   where
     go x s0 =
@@ -212,11 +159,11 @@ printArrayBounds low high arr s0 = go low s0
            in go (x +# 1#) s1
         _ -> undefined
 
-    printIthOfArray :: Array# Value# -> Int# -> State# RealWorld -> (# State# RealWorld, () #)
+    printIthOfArray :: ByteArray# -> Int# -> State# RealWorld -> (# State# RealWorld, () #)
     printIthOfArray arr i s0 =
-      let (# !val #) = indexArray# arr i
-       in let !_ = unsafePerformIO (putStr $! showValue# val <> " ")
-           in (# s0, () #)
+      let !(# s1, !val #) = decodeValue1# arr i s0
+          !(# s2, _ #) = unIO (putStr $! showValue# val <> " ") s1
+       in (# s2, () #)
     {-# INLINE printIthOfArray #-}
 {-# INLINE printArrayBounds #-}
 
@@ -257,24 +204,24 @@ eval (Context dataStack callStack ip constants _ functions code) s0 =
               let !_ = unsafePerformIO (putStrLn $ ">> PRIM: get index from offset " <> show (I# (ip0 +# 1#))) in
 #endif
               let !idx = indexWord32Array# code (ip0 +# 1#)
-                  (# VPrimitive# !f _ #) = indexArray# constants (int32ToInt# (word32ToInt32# idx))
+                  !off = word2Int# (word32ToWord# idx)
 #if DEBUG == 1
                   !_ = unsafePerformIO (putStrLn $ "> Computing primitive at index " <> show (W32# idx))
 #endif
-                  !(# s1, !stack0 #) = f dataStack s0
+                  !(# s1, stack0 #) = prim off dataStack s0
                in go stack0 callStack size (ip0 +# 2#) s1
             BYTECODE_PUSH## ->
               let !idx = indexWord32Array# code (ip0 +# 1#)
-                  (# !cst #) = indexArray# constants (int32ToInt# (word32ToInt32# idx))
-                  !(# s1, !stack0 #) = pushDataStack# dataStack cst s0
+                  !(# s1, !cst #) = decodeValue1# constants (int32ToInt# (word32ToInt32# idx)) s0
+                  !(# s2, !stack0 #) = pushDataStack# dataStack cst s1
 #if DEBUG == 1
                   !_ = unsafePerformIO (putStrLn $ "> Pushing constant #" <> show (W32# idx) <> " (" <> showValue# cst <> ")")
 #endif
-               in go stack0 callStack size (ip0 +# 2#) s1
+               in go stack0 callStack size (ip0 +# 2#) s2
             BYTECODE_JUMP## ->
               let !idx = indexWord32Array# code (ip0 +# 1#)
                   !off = indexIntArray# functions (int32ToInt# (word32ToInt32# idx))
-                  !(# s1, !stack0 #) = pushCallStack# callStack (ip0 +# 2#) s0
+                  !(# s1, stack0 #) = pushCallStack# callStack (ip0 +# 2#) s0
 #if DEBUG == 1
                   !_ = unsafePerformIO (putStrLn $ "> Jumping to code offset " <> show (I# off) <> " found at entry #" <> show (W32# idx) <> " from ip=" <> show (I# ip0))
 #endif
