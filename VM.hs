@@ -48,7 +48,7 @@ import GHC.Word (Word32 (W32#))
 import Primitives (TypeError (TypeError), prim)
 import Runtime.Stack (CallStack#, DataStack#, StackUnderflow, freezeDataStack#, newCallStack#, newDataStack#, popCallStack#, popDataStack#, pushCallStack#, pushDataStack#)
 #if DEBUG == 1
-import Runtime.Stack (debugCallStack#)
+import Runtime.Stack (debugCallStack#, debugDataStack#)
 #endif
 import Examples
 import Runtime.Value (Value# (VQuote#), decodeValue1#, showValue#)
@@ -87,6 +87,7 @@ main = IO (catch# main' rethrow)
   where
     rethrow :: a -> State# RealWorld -> (# State# RealWorld, () #)
     rethrow exn s0 = (# s0, raise# exn #)
+    {-# INLINE rethrow #-}
 
 main' :: State# RealWorld -> (# State# RealWorld, () #)
 main' s0 =
@@ -110,7 +111,7 @@ main' s0 =
         ("ack", ack),
         ("fib", fib)
       ]
-    {-# INLINE withBindings #-}
+    {-# NOINLINE withBindings #-}
 
     eval' :: DataStack# RealWorld -> CallStack# RealWorld -> BytecodeFile -> State# RealWorld -> (# State# RealWorld, (# DataStack# RealWorld, CallStack# RealWorld #) #)
     eval' stack cstack (File constants symbols functions code ip) s0 =
@@ -147,10 +148,9 @@ printArrayBounds low high arr s0 = go low s0
         1# ->
           let !_ = unsafePerformIO (putStrLn "")
            in (# s0, () #)
-        0# ->
+        _ ->
           let !(# s1, _ #) = printIthOfArray arr x s0
            in go (x +# 1#) s1
-        _ -> undefined
 
     printIthOfArray :: ByteArray# -> Int# -> State# RealWorld -> (# State# RealWorld, () #)
     printIthOfArray arr i s0 =
@@ -192,6 +192,7 @@ eval dataStack callStack ip constants _ functions code size s0 =
 #if DEBUG == 1
           let !_ = unsafePerformIO (putStrLn $ "code size=(expected=" <> show (I# size) <> ", real=" <> show (I# (sizeofByteArray# code `quotInt#` 4#)) <> "), access at=" <> show (I# ip0))
               _ = debugCallStack# callStack s0
+              _ = debugDataStack# dataStack s0
            in
 #endif
           case word32ToWord# (indexWord32Array# code ip0) of

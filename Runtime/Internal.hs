@@ -173,21 +173,17 @@ resizeCallStack# arr ptr s0 =
 debugCallStack# :: CallStack# RealWorld -> State# RealWorld -> State# RealWorld
 debugCallStack# (CallStack (# arr, ptr #)) s0 =
   let !(# s1, _ #) = unIO (putStr "stack=[ ") s0
-      !(# s2, !size #) = getSizeofMutableByteArray# arr s1
-      !(# s3, !arr0 #) = newPinnedByteArray# size s2
-      !s4 = copyMutableByteArray# arr 0# arr0 0# size s3
-      !(# s5, !arr1 #) = unsafeFreezeByteArray# arr0 s4
-      !(# s6, ptr0 #) = readIntVar# ptr s5
-   in go arr1 0# (ptr0 +# 1#) s6
+      !(# s2, ptr0 #) = readIntVar# ptr s1
+   in go arr 0# (ptr0 +# 1#) s2
   where
-    go arr0 off end s0 = case off >=# end of
+    go arr off end s0 = case off >=# end of
       1# ->
         let !(# s1, _ #) = unIO (putStrLn ("], ptr=" <> show (I# (end -# 1#)))) s0
          in s1
       _ ->
-        let !idx = indexIntArray# arr0 off
-            !(# s1, _ #) = unIO (putStr (show (I# idx) <> " ")) s0
-         in go arr0 (off +# 1#) end s1
+        let !(# s1, idx #) = readIntArray# arr off s0
+            !(# s2, _ #) = unIO (putStr (show (I# idx) <> " ")) s1
+         in go arr (off +# 1#) end s2
 #endif
 
 {- ORMOLU_ENABLE -}
@@ -294,23 +290,19 @@ resizeDataStack# arr ptr s0 =
 
 #if DEBUG == 1
 debugDataStack# :: DataStack# RealWorld -> State# RealWorld -> State# RealWorld
-debugDataStack# (DataStack (# arr, ptr #)) s0 = s0
-  -- let !(# s1, _ #) = unIO (putStr "stack=[ ") s0
-  --     !(# s2, !size #) = getSizeofMutableByteArray# arr s1
-  --     !(# s3, !arr0 #) = newPinnedByteArray# size s2
-  --     !s4 = copyMutableByteArray# arr 0# arr0 0# size s3
-  --     !(# s5, !arr1 #) = unsafeFreezeByteArray# arr0 s4
-  --     !(# s6, ptr0 #) = readIntVar# ptr s5
-  --  in go arr1 0# (ptr0 +# 1#) s6
-  -- where
-  --   go arr0 off end s0 = case off >=# end of
-  --     1# ->
-  --       let !(# s1, _ #) = unIO (putStrLn ("], ptr=" <> show (I# (end -# 1#)))) s0
-  --        in s1
-  --     _ ->
-  --       let !idx = indexIntArray# arr0 off
-  --           !(# s1, _ #) = unIO (putStr (show (I# idx) <> " ")) s0
-  --        in go arr0 (off +# 1#) end s1
+debugDataStack# (DataStack (# arr, ptr #)) s0 = 
+  let !(# s1, _ #) = unIO (putStr "data=[ ") s0
+      !(# s2, ptr0 #) = readIntVar# ptr s1
+   in go arr 0# (ptr0 +# 1#) s2
+  where
+    go arr off end s0 = case off >=# end of
+      1# ->
+        let !(# s1, _ #) = unIO (putStrLn ("], ptr=" <> show (I# (end -# 1#)))) s0
+         in s1
+      _ ->
+        let !(# s1, val #) = decodeValue0# arr off s0
+            !(# s2, _ #) = unIO (putStr (showValue# val <> " ")) s1
+         in go arr (off +# 1#) end s2
 #endif
 
 

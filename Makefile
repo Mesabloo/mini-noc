@@ -14,10 +14,12 @@ GHC := ghc
 RR := rr
 RR_TRACE_DIR := rr_traces
 
+ARGS :=
+
 all: VM
 
 VM: release
-	-./$(EXECUTABLE)
+	-./$(EXECUTABLE) $(ARGS)
 
 debugging: debug
 	-mkdir $(RR_TRACE_DIR)
