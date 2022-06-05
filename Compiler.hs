@@ -184,6 +184,7 @@ compile expr bindings s0 =
           !s15 = writeIntVar# functionsPtr (functionsPtr0 +# 1#) s14
           !s16 = writeIntVar# symbolsPtr (symbolsPtr0 +# 1#) s15
        in compileAdditionalBindings binds constants0 constantsPtr symbols1 symbolsPtr functions1 functionsPtr code2 codePtr s16
+    {-# NOINLINE compileAdditionalBindings #-}
 {-# INLINEABLE compile #-}
 
 compileExpr ::
@@ -249,6 +250,7 @@ precompileQuotes = go []
             !quoteId = ("$" <> Text.pack (show (I# codePtr0)))
          in go (AIdentifier quoteId : acc) expr constants1 constantsPtr symbols1 symbolsPtr functions1 functionsPtr code3 codePtr s7
       _ -> go (atom : acc) expr constants constantsPtr symbols symbolsPtr functions functionsPtr code codePtr s0
+    {-# NOINLINE go #-}
 {-# INLINE precompileQuotes #-}
 
 compileAtoms ::
@@ -338,6 +340,7 @@ compileAtoms (atom : expr) constants constantsPtr symbols symbolsPtr functions f
               !(# s5, code1 #) = pushOpcodes [BYTECODE_JUMP, W32# (int32ToWord32# (intToInt32# index))] codePtr0 code0 codePtr s4
            in (# s5, (# constants, symbols, functions, code1 #) #)
     compileAtom (AQuote _) constants symbols functions code s0 = (# s0, (# constants, symbols, functions, code #) #)
+    {-# NOINLINE compileAtom #-}
 {-# INLINE compileAtoms #-}
 
 pushOpcodes :: [ByteCode] -> Int# -> MutableByteArray# RealWorld -> MutableIntVar# RealWorld -> State# RealWorld -> (# State# RealWorld, MutableByteArray# RealWorld #)
@@ -407,6 +410,7 @@ insertConstantInTableOnlyWhenNotFound cst constants cstPtr cstPtr0 s0 = go const
          in case eqValue# cst value of
               0# -> go table (x +# 1#) end s1
               _ -> (# s1, (# x, table #) #)
+    {-# NOINLINE go #-}
 {-# INLINE insertConstantInTableOnlyWhenNotFound #-}
 
 findIndexFromReducerName :: MutableArray# RealWorld Text -> Text -> State# RealWorld -> (# State# RealWorld, Int# #)
@@ -422,4 +426,5 @@ findIndexFromReducerName functions name s0 =
          in if fnName == name
               then (# s0, x #)
               else go funs (x +# 1#) end s0
+    {-# NOINLINE go #-}
 {-# INLINE findIndexFromReducerName #-}

@@ -184,6 +184,8 @@ debugCallStack# (CallStack (# arr, ptr #)) s0 =
         let !(# s1, idx #) = readIntArray# arr off s0
             !(# s2, _ #) = unIO (putStr (show (I# idx) <> " ")) s1
          in go arr (off +# 1#) end s2
+    {-# NOINLINE go #-}
+{-# NOINLINE debugCallStack# #-}
 #endif
 
 {- ORMOLU_ENABLE -}
@@ -303,6 +305,8 @@ debugDataStack# (DataStack (# arr, ptr #)) s0 =
         let !(# s1, val #) = decodeValue0# arr off s0
             !(# s2, _ #) = unIO (putStr (showValue# val <> " ")) s1
          in go arr (off +# 1#) end s2
+    {-# NOINLINE go #-}
+{-# NOINLINE debugDataStack# #-}
 #endif
 
 
@@ -386,6 +390,18 @@ decodeValue0# arr ptr s0 =
     --
     -- NOTE: ignore the warning on this, because if we uncomment this line, performances are way worse
 {-# INLINEABLE decodeValue0# #-}
+-- NOTE: I would have liked to test putting 'INLINE' but GHC generates invalid assembly code if done so:
+--
+-- /run/user/1000/ghc3224426_0/ghc_23.s: Assembler messages:
+--
+-- /run/user/1000/ghc3224426_0/ghc_23.s:1669:0: error:
+--      Error: operand type mismatch for `ucomiss'
+--      |
+-- 1669 |         ucomiss %r11,%xmm1
+--      | ^
+--
+-- <no location info>: error:
+--     `cc' failed in phase `Assembler'. (Exit code: 1)
 
 decodeValue1# :: ByteArray# -> Int# -> State# s -> (# State# s, Value# #)
 decodeValue1# arr ptr s0 =

@@ -9,7 +9,7 @@ Here are the last known performance results on my machine:
 
 | `fact(15)` | `ack(3,6)` | `fib(28)` |
 | :--------: | :--------: | :-------: |
-|   ~5µs   |   ~31ms   |  ~107ms  |
+|   ~4µs   |   ~28ms   |  ~96ms  |
 
 Note that this is meant to be 100% Haskell code.
 Github detects some C code from a `.h` file which is meant only to use some constants across multiple modules.

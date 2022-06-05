@@ -26,6 +26,7 @@ type Expr = [Atom]
 
 instance {-# OVERLAPPING #-} Show Expr where
   show ex = List.unwords $ show <$> ex
+  {-# INLINE show #-}
 
 -- | Atoms are uncuttable parts of a program.
 type Atom :: Type
@@ -50,3 +51,4 @@ instance Show Atom where
   show (AFloat d) = show d
   show (ACharacter c) = show c
   show (ABoolean b) = show b
+  {-# INLINE show #-}

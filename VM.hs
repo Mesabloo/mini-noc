@@ -77,6 +77,8 @@ showTime = go "s"
     go unit d = case d <## 1.0## of
       1# | not (lastUnit unit) -> go (next unit) (d *## 1000.0##)
       _ -> show (D# d) <> unit
+    {-# NOINLINE go #-}
+{-# NOINLINE showTime #-}
 
 -------------------------------------------------------------
 ----------------------- ENTRY POINT -------------------------
@@ -88,10 +90,11 @@ main = IO (catch# main' rethrow)
     rethrow :: a -> State# RealWorld -> (# State# RealWorld, () #)
     rethrow exn s0 = (# s0, raise# exn #)
     {-# INLINE rethrow #-}
+{-# INLINE main #-}
 
 main' :: State# RealWorld -> (# State# RealWorld, () #)
 main' s0 =
-  let !expr = example12
+  let !expr = example4
       !(# s1, _ #) = unIO (putStr "> ") s0
       !(# s2, _ #) = unIO (print expr) s1
       !(# s3, !bytecodeFile0 #) = compile expr withBindings s2
@@ -151,6 +154,7 @@ printArrayBounds low high arr s0 = go low s0
         _ ->
           let !(# s1, _ #) = printIthOfArray arr x s0
            in go (x +# 1#) s1
+    {-# NOINLINE go #-}
 
     printIthOfArray :: ByteArray# -> Int# -> State# RealWorld -> (# State# RealWorld, () #)
     printIthOfArray arr i s0 =
@@ -184,7 +188,12 @@ eval dataStack callStack ip constants _ functions code size s0 =
   let !(# s1, Lift !res #) = catch# (go dataStack callStack ip) handler s0
    in (# s1, res #)
   where
-    go :: DataStack# RealWorld -> CallStack# RealWorld -> Int# -> State# RealWorld -> (# State# RealWorld, Lift (# DataStack# RealWorld, CallStack# RealWorld #) #)
+    go ::
+      DataStack# RealWorld ->
+      CallStack# RealWorld ->
+      Int# ->
+      State# RealWorld ->
+      (# State# RealWorld, Lift (# DataStack# RealWorld, CallStack# RealWorld #) #)
     go dataStack callStack ip0 s0 =
       case ip0 >=# size of
         1# -> (# s0, Lift (# dataStack, callStack #) #)
@@ -238,9 +247,10 @@ eval dataStack callStack ip constants _ functions code size s0 =
 #if DEBUG == 1
                           !_ = unsafePerformIO (putStrLn $ "> Unquotting quote found at offset " <> show (I# off) <> " from ip=" <> show (I# ip0))
 #endif
-                       in go dataStack stack0 off s2
+                       in {-# SCC "excuse-me?" #-} go dataStack stack0 off s2
                     val -> raise# (toException $ TypeError $ "Not a quote: " <> showValue# val)
             _ -> undefined
+    {-# NOINLINE go #-}
 
     handler :: SomeException -> State# RealWorld -> (# State# RealWorld, Lift (# DataStack# RealWorld, CallStack# RealWorld #) #)
     handler (!exn :: SomeException) s0 =
@@ -286,6 +296,7 @@ fact =
     AIdentifier "if", -- [n [1] | [(n*fact(n-1))]]
     AIdentifier "unquote" -- [1 | n*fact(n-1)]
   ]
+{-# NOINLINE fact #-}
 
 ack :: Expr
 ack =
@@ -333,6 +344,7 @@ ack =
     AIdentifier "if", -- [n m [(n+1) | (ack(m-1,1) | ack(m-1,ack(m,n-1)))]]
     AIdentifier "unquote" -- [(n+1 | ack(m-1,1) | ack(m-1,ack(m,n-1)))]
   ]
+{-# NOINLINE ack #-}
 
 fib :: Expr
 fib =
@@ -358,3 +370,4 @@ fib =
     AIdentifier "if", -- [[n] | [fib(n-1)+fib(n-2)]]
     AIdentifier "unquote" -- [n | fib(n-1)+fib(n-2)]
   ]
+{-# NOINLINE fib #-}
