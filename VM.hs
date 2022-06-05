@@ -230,8 +230,9 @@ eval dataStack callStack ip constants _ functions code size s0 =
                in go dataStack stack0 off s1
             BYTECODE_UNQUOTE## ->
               let !(# s1, !val #) = popDataStack# dataStack s0
-               in {-# SCC "potential-VQuote#-allocs?" #-} case val of
+               in case val of
                     VQuote# off ->
+                      {-# SCC "potential-VQuote#-allocs?" #-} 
                       let !(# s2, !stack0 #) = pushCallStack# callStack (ip0 +# 1#) s1
 #if DEBUG == 1
                           !_ = unsafePerformIO (putStrLn $ "> Unquotting quote found at offset " <> show (I# off) <> " from ip=" <> show (I# ip0))
