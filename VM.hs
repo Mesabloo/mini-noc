@@ -37,6 +37,9 @@ import Data.String (String)
 import Data.Text (Text)
 import Expr (Atom (..), Expr)
 import GHC.Exts (ByteArray#, Double (..), Double#, Int#, RealWorld, State#, TYPE, catch#, indexIntArray#, indexWord32Array#, int32ToInt#, quotInt#, raise#, sizeofByteArray#, word2Int#, word32ToInt32#, word32ToWord#, (*##), (+#), (-#), (<##), (>#), (>=#))
+#if DEBUG == 1
+import GHC.Exts (Int (I#))
+#endif
 import GHC.IO (IO (..), unIO, unsafePerformIO)
 import GHC.Types (RuntimeRep (TupleRep), Type, UnliftedRep)
 #if DEBUG == 1
@@ -188,7 +191,7 @@ eval dataStack callStack ip constants _ functions code size s0 =
         _ ->
 #if DEBUG == 1
           let !_ = unsafePerformIO (putStrLn $ "code size=(expected=" <> show (I# size) <> ", real=" <> show (I# (sizeofByteArray# code `quotInt#` 4#)) <> "), access at=" <> show (I# ip0))
-              !_ = debugCallStack# callStack s0
+              _ = debugCallStack# callStack s0
            in
 #endif
           case word32ToWord# (indexWord32Array# code ip0) of
