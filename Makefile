@@ -3,8 +3,8 @@ EXECUTABLE := VM
 
 GHC_FLAGS = -Weverything -Wno-missing-import-lists -Wno-unsafe -Wno-name-shadowing -Wno-missing-export-lists
 
-GHC_FLAGS_RELEASE = -O2 -rtsopts -DDEBUG=0 -flate-dmd-anal -fstatic-argument-transformation -flate-specialise -fspecialise-aggressively 
-GHC_FLAGS_DEBUG = -debug -DDEBUG=1 -g3 -O0 -rtsopts
+GHC_FLAGS_RELEASE = -O2 -rtsopts -DDEBUG=0 -DPROF=0 -flate-dmd-anal -fstatic-argument-transformation -fasm-shortcutting 
+GHC_FLAGS_DEBUG = -debug -DDEBUG=1 -DPROF=0 -g3 -O0 -rtsopts
 GHC_FLAGS_PROF = -rtsopts -DDEBUG=0 -prof -fprof-auto -DPROF=1 
             
 GHC_EXTS := -XStrict -XNoStarIsType -XNoImplicitPrelude

@@ -13,13 +13,13 @@
 --- after.
 ---
 --- This opcode adds a new entry on top of the call stack corresponding to its
---- current offset + 2 (to accomodate for the additional argument).
-#define BYTECODE_PUSH 1
+--- current offset + 4 (to accomodate for the additional argument).
+#define BYTECODE_JUMP 1
 
 --- Push a new constant on top of the data stack.
 ---
 --- The offset in the constant table must be found right after this opcode.
-#define BYTECODE_JUMP 2
+#define BYTECODE_PUSH 2
 
 --- Return to the last caller address found on the call stack.
 #define BYTECODE_RET 3

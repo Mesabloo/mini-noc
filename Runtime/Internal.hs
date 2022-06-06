@@ -65,7 +65,7 @@ import Data.Function (($))
 import Data.Semigroup ((<>))
 import Data.String (String)
 import GHC.Exception (Exception)
-import GHC.Exts (Char (C#), Char#, Int (I#), Int#, MutableByteArray#, RealWorld, State#, eqChar#, getSizeofMutableByteArray#, newByteArray#, quotInt#, readIntArray#, resizeMutableByteArray#, writeIntArray#, (*#), (+#), (==#), (>=#), ByteArray#, Float#, Float (F#), eqFloat#, readWord8Array#, word8ToWord#, unsafeCoerce#, copyMutableByteArray#, unsafeFreezeByteArray#, Word32#, readWord8ArrayAsWord32#, writeWord8Array#, writeWord8ArrayAsWord32#, wordToWord8#, indexWord8Array#, indexWord8ArrayAsWord32#, Word8#, word2Int#, word32ToWord#, Double#, (==##), Double (D#), readWord8ArrayAsWord64#, indexWord8ArrayAsWord64#, writeWord8ArrayAsWord#, readWord8ArrayAsWord#, indexWord8ArrayAsWord#, Word#)
+import GHC.Exts (Char (C#), Char#, Int (I#), Int#, MutableByteArray#, RealWorld, State#, eqChar#, getSizeofMutableByteArray#, newByteArray#, quotInt#, readIntArray#, resizeMutableByteArray#, writeIntArray#, (*#), (+#), (==#), (>=#), ByteArray#, readWord8Array#, word8ToWord#, unsafeCoerce#, copyMutableByteArray#, unsafeFreezeByteArray#, writeWord8Array#, wordToWord8#, indexWord8Array#, Word8#, Double#, (==##), Double (D#), writeWord8ArrayAsWord#, readWord8ArrayAsWord#, indexWord8ArrayAsWord#, Word#)
 #if STACK_SAFE_OPERATIONS == 1
 import GHC.Exts (raise#)
 #endif
